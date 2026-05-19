@@ -1,0 +1,233 @@
+/* 전역 글꼴 및 배경 설정 */
+QWidget {
+    font-family: 'Segoe UI', 'Malgun Gothic', 'Helvetica Neue', sans-serif;
+    font-size: 13px;
+    color: #2C3E50;
+    background-color: #F8F9FA;
+}
+
+/* 그룹 박스 (섹션 구분) */
+QGroupBox {
+    font-weight: bold;
+    font-size: 14px;
+    color: #34495E;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    margin-top: 12px;
+    padding-top: 15px;
+    background-color: #FFFFFF;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 10px;
+    padding: 0 5px;
+    background-color: #FFFFFF;
+}
+
+/* 푸시 버튼 스타일 */
+QPushButton {
+    background-color: #ECEFF1;
+    color: #37474F;
+    border: 1px solid #CFD8DC;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-weight: 500;
+}
+
+QPushButton:hover {
+    background-color: #E2E8F0;
+    border-color: #B0BEC5;
+}
+
+QPushButton:pressed {
+    background-color: #CFD8DC;
+}
+
+QPushButton:disabled {
+    background-color: #F1F3F5;
+    color: #ADB5BD;
+    border-color: #E9ECEF;
+}
+
+/* 주요 동작 버튼 (탐지 실행) - HSL 매칭 소프트 그린-블루 계열 */
+QPushButton#btn_run_detection {
+    background-color: #00897B;
+    color: #FFFFFF;
+    border: none;
+    font-weight: bold;
+    min-height: 32px;
+}
+
+QPushButton#btn_run_detection:hover {
+    background-color: #00796B;
+}
+
+QPushButton#btn_run_detection:pressed {
+    background-color: #00695C;
+}
+
+/* 저장 버튼 - 프리미엄 블루 계열 */
+QPushButton#btn_save {
+    background-color: #1E88E5;
+    color: #FFFFFF;
+    border: none;
+    font-weight: bold;
+    min-height: 35px;
+}
+
+QPushButton#btn_save:hover {
+    background-color: #1565C0;
+}
+
+QPushButton#btn_save:pressed {
+    background-color: #0D47A1;
+}
+
+/* 텍스트 편집창 (QPlainTextEdit) */
+QPlainTextEdit {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 6px;
+    selection-background-color: #BBDEFB;
+    selection-color: #0D47A1;
+}
+
+QPlainTextEdit:focus {
+    border: 1px solid #1E88E5;
+    background-color: #FAFAFA;
+}
+
+/* 파일 리스트 위젯 */
+QListWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 5px;
+}
+
+QListWidget::item {
+    padding: 6px;
+    border-bottom: 1px solid #F1F5F9;
+}
+
+QListWidget::item:hover {
+    background-color: #F1F5F9;
+    border-radius: 4px;
+}
+
+QListWidget::item:selected {
+    background-color: #E3F2FD;
+    color: #1E88E5;
+    font-weight: bold;
+    border-radius: 4px;
+}
+
+/* 검수 테이블 (QTableWidget) 스타일 */
+QTableWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    gridline-color: #F1F5F9;
+    border-radius: 8px;
+    selection-background-color: #E3F2FD;
+    selection-color: #1E88E5;
+}
+
+QTableWidget::item {
+    padding: 6px;
+}
+
+QTableWidget::item:hover {
+    background-color: #F8FAFC;
+}
+
+/* 테이블 헤더 커스텀 */
+QHeaderView::section {
+    background-color: #F1F5F9;
+    color: #475569;
+    padding: 8px;
+    font-weight: bold;
+    border: none;
+    border-bottom: 2px solid #E2E8F0;
+    border-right: 1px solid #E2E8F0;
+}
+
+QHeaderView::section:horizontal {
+    border-top: none;
+}
+
+/* 진행 상태 바 (QProgressBar) */
+QProgressBar {
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    text-align: center;
+    background-color: #F1F5F9;
+    height: 18px;
+    font-weight: bold;
+    color: #1E88E5;
+}
+
+QProgressBar::chunk {
+    background-color: #90CAF9;
+    width: 15px;
+    border-radius: 7px;
+}
+
+/* 체크박스 스타일 */
+QCheckBox {
+    spacing: 5px;
+}
+
+QCheckBox::indicator {
+    width: 18px;
+    height: 18px;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    background: #FFFFFF;
+}
+
+QCheckBox::indicator:hover {
+    border-color: #1E88E5;
+}
+
+QCheckBox::indicator:checked {
+    background: #1E88E5;
+    border-color: #1E88E5;
+    image: url(data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>);
+}
+
+/* 콤보박스 (Dropdown) */
+QComboBox {
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 4px 10px;
+    min-width: 80px;
+    background-color: #FFFFFF;
+}
+
+QComboBox:focus {
+    border-color: #1E88E5;
+}
+
+QComboBox::drop-down {
+    border: none;
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+}
+
+QComboBox::down-arrow {
+    image: url(data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="%23475569" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>);
+    width: 12px;
+    height: 12px;
+}
+
+/* 상태 바 */
+QStatusBar {
+    background-color: #F1F5F9;
+    color: #64748B;
+    border-top: 1px solid #E2E8F0;
+    font-size: 12px;
+}
