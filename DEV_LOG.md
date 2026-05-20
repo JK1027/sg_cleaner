@@ -56,9 +56,58 @@
 
 ---
 
+## [2026-05-20] 익명화 처리 시 삭제 옵션 및 동적 입력창 구현 (v1.1.0)
+
+### 1. 삭제(제거) 모드 추가 및 상태 관리 통합
+- **작업 내용**:
+  - `app/models/app_state.py` 내에 `anonymize_mode` ("변경" / "삭제")와 `delete_replacement` (삭제 대체 텍스트) 상태 필드 추가.
+  - `app/controllers/app_controller.py` 내에 `update_anonymize_mode` 메서드 구현 및 비동기 `DetectionWorker` 스레드 생성 시 해당 옵션 전달 연동.
+  - `app/services/worker.py` 의 `DetectionWorker`가 생성 단계에서 옵션을 수령하여 `AnonymizeDetector` 초기화 시 제공하도록 수정.
+
+### 2. 탐색 엔진 내 치환 값 처리 규칙 확장
+- **작업 내용**:
+  - `app/services/detector.py` 의 `AnonymizeDetector`에서 `anonymize_mode`가 "삭제"일 경우, 학생 및 학교명의 매핑 값으로 인덱스 가명("학생1", "학교A") 대신 설정된 삭제 대체 텍스트(`delete_replacement`)를 일괄 바인딩하도록 로직 수정.
+
+### 3. UI 동적 가시성 및 리렌더링 제어
+- **작업 내용**:
+  - `app/ui/main_window.py` 의 '2. 탐지 키워드 및 대장 저장 옵션' 섹션에 익명화 방식 콤보박스(`combo_anon_mode`) 및 삭제 시 대체 텍스트를 입력받는 QLineEdit(`txt_delete_replacement`) 추가.
+  - 콤보박스에서 "삭제 (제거)"를 선택할 때에만 옆에 대체 텍스트 입력창이 노출되도록 `setVisible` 동적 제어 적용.
+  - `on_state_changed` 리렌더링 시 신호 차단(`blockSignals`)을 적용하여 무한 루프 없이 전역 상태와 UI 컴포넌트의 값 동기화 구현.
+
+### 4. 단위 테스트 보강 및 무결성 검증
+- **작업 내용**:
+  - `tests/test_engine.py` 내에 `test_delete_mode` 테스트 메서드 신설.
+  - `anonymize_mode="삭제"` 모드에서 대체 문구(`***`) 및 완전 삭제(빈 문자열) 적용 시 openpyxl을 통해 읽어들인 최종 Excel 결과 값이 완벽히 치환/삭제 처리되고, 주변 서식과 다른 셀 데이터가 온전함을 자동 검증 완료.
+
+---
+
+## [2026-05-20] 3개 텍스트 상자 입력을 통한 가명화 및 완전 삭제 개별 처리 지원 (v1.2.0)
+
+### 1. 3열 입력 구조 전환 및 개별 상태 관리
+- **작업 내용**:
+  - `app/models/app_state.py`에서 기존 전역 `anonymize_mode`를 제거하고, 삭제 대상을 직접 여러 개 관리할 수 있도록 `delete_keywords: List[str]` 상태 필드를 추가하였습니다.
+  - `app/controllers/app_controller.py`의 `update_input_patterns`를 3개 인자(학생 이름, 학교명, 삭제 단어)로 수령 및 갱신하도록 확장하고, `update_delete_replacement`를 추가하여 대체 텍스트 상태를 단독 관리하도록 변경하였습니다.
+
+### 2. UI 3열 격자 배치 리팩토링 및 락 제어
+- **작업 내용**:
+  - `app/ui/main_window.py`의 '2. 탐지 키워드 및 대장 저장 옵션' 그룹박스 레이아웃을 3개 열로 재배치하여 학생 이름 목록(가명화), 학교명 목록(가명화), 삭제할 단어 목록(제거)을 한 화면에 고정 노출하였습니다.
+  - 삭제 단어 입력창 바로 하단에 "삭제 대체 텍스트"(`QLineEdit`) 입력 칸을 고정 배치하여 일치감을 부여하였습니다.
+  - 탐색 진행 중 비활성화(Disable) 락 제어 목록에 신규 추가된 `txt_delete_keywords` 및 `txt_delete_replacement`를 포함시켰습니다.
+
+### 3. 탐지 서비스 및 매핑 엔진 확장
+- **작업 내용**:
+  - `app/services/detector.py`의 `AnonymizeDetector`가 `delete_keywords` 목록을 수령하여, `scan_workbook` 내부에서 탐지된 삭제 단어들에 대해 `delete_mapping`에 지정된 `delete_replacement` 값을 바인딩하여 탐지하도록 로직을 재설계하였습니다.
+  - `get_full_mapping` 함수를 수정하여 삭제 매핑 정보(`delete_mapping`)도 학생/학교 매핑과 함께 전체 대장 딕셔너리에 병합하여 대장에 기록될 수 있도록 구현하였습니다.
+
+### 4. 단위 테스트 대응 리팩토링 및 검증 완료
+- **작업 내용**:
+  - `tests/test_engine.py` 내의 `test_delete_mode` 테스트 케이스를 3열 기반 탐지 방식으로 리팩토링하여 `delete_keywords` 연동을 통한 `***` 치환 및 빈 문자열 삭제 처리가 온전하게 저장 검증(Safe Save)됨을 전원 확인하였습니다. (5개 테스트 전원 통과)
+
+---
+
 ## 남은 이슈 및 다음 작업 예정 (향후 유지보수)
-- [ ] 실사용자 업무 환경 배포 및 피드백 대응
-- [ ] PRD 외 요구사항 발생 시 v0.2.0 마일스톤 업데이트 계획 수립
+- [ ] 실사용자 업무 환경 배포 및 3열 UI 피드백 대응
+- [ ] PRD 외 추가적인 가명 처리 규칙 발생 시 매핑 대장 저장 옵션 다양화 검토
 
 
 

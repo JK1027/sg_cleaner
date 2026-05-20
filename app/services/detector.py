@@ -6,14 +6,18 @@ class AnonymizeDetector:
     """
     사용자가 입력한 학생 이름/학교명 패턴 목록에 근거하여 Excel 셀의 텍스트 데이터를 검색 및 탐지하는 엔진.
     """
-    def __init__(self, student_names: list[str], school_names: list[str]):
+    def __init__(self, student_names: list[str], school_names: list[str],
+                 delete_keywords: list[str] = None, delete_replacement: str = ""):
         # 공백 제거 및 중복 제거 처리
         self.student_names = list(set([name.strip() for name in student_names if name.strip()]))
         self.school_names = list(set([school.strip() for school in school_names if school.strip()]))
+        self.delete_keywords = list(set([word.strip() for word in (delete_keywords or []) if word.strip()]))
+        self.delete_replacement = delete_replacement
         
         # 탐색 과정 중 고유한 익명화 대체 이름(예: 학생1, 학교A)을 관리하기 위한 매핑 저장소
         self.student_mapping = {} # {'김민수': '학생1'}
         self.school_mapping = {}   # {'서울중학교': '학교A'}
+        self.delete_mapping = {}   # {'지울단어': ''}
 
     def scan_workbook(self, file_path: str) -> list[DetectionItem]:
         """
@@ -103,13 +107,32 @@ class AnonymizeDetector:
                             results.append(item)
                             logger.debug(f"학교명 탐지: {cell.coordinate} -> {school}")
 
+                    # 3. 삭제할 단어 매칭
+                    for word in self.delete_keywords:
+                        if word in cell_text:
+                            if word not in self.delete_mapping:
+                                self.delete_mapping[word] = self.delete_replacement
+                                
+                            item = DetectionItem(
+                                file_path=file_path,
+                                sheet_name=sheet_name,
+                                cell_address=cell.coordinate,
+                                original_value=cell_text,
+                                match_value=word,
+                                replacement=self.delete_mapping[word],
+                                approved=True
+                            )
+                            results.append(item)
+                            logger.debug(f"삭제 단어 탐지: {cell.coordinate} -> {word}")
+
         wb.close()
         logger.info(f"스캔 완료: {file_path} (탐색 개수: {len(results)}개)")
         return results
 
     def get_full_mapping(self) -> dict[str, str]:
-        """학생 및 학교의 전체 누적 치환 매핑 대장을 병합하여 반환합니다."""
+        """학생, 학교 및 삭제 키워드의 전체 누적 치환 매핑 대장을 병합하여 반환합니다."""
         full_map = {}
         full_map.update(self.student_mapping)
         full_map.update(self.school_mapping)
+        full_map.update(self.delete_mapping)
         return full_map

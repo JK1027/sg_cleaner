@@ -30,12 +30,13 @@ class AppController(QObject):
         logger.info(f"선택 파일 리스트 업데이트: {len(file_paths)}개 등록됨.")
         self.state_changed.emit()
 
-    def update_input_patterns(self, students: list[str], schools: list[str]) -> None:
-        """사용자가 화면에서 수정한 대상 이름/학교명 패턴을 갱신합니다."""
+    def update_input_patterns(self, students: list[str], schools: list[str], delete_keywords: list[str]) -> None:
+        """사용자가 화면에서 수정한 대상 이름/학교명/삭제 단어 패턴을 갱신합니다."""
         # 공백 제거 및 필터링
         self.state.student_names = [name.strip() for name in students if name.strip()]
         self.state.school_names = [school.strip() for school in schools if school.strip()]
-        logger.info(f"탐지 키워드 갱신 - 학생: {len(self.state.student_names)}명, 학교: {len(self.state.school_names)}개")
+        self.state.delete_keywords = [word.strip() for word in delete_keywords if word.strip()]
+        logger.info(f"탐지 키워드 갱신 - 학생: {len(self.state.student_names)}명, 학교: {len(self.state.school_names)}개, 삭제: {len(self.state.delete_keywords)}개")
         self.state_changed.emit()
 
     def update_save_options(self, save_mapping: bool, mapping_format: str) -> None:
@@ -60,6 +61,12 @@ class AppController(QObject):
             logger.info(f"항목 #{index} 치환명 수정: {old_text} -> {new_text}")
             self.state_changed.emit()
 
+    def update_delete_replacement(self, replacement: str) -> None:
+        """삭제 대체 텍스트를 업데이트합니다."""
+        self.state.delete_replacement = replacement
+        logger.info(f"삭제 대체 텍스트 변경: '{replacement}'")
+        self.state_changed.emit()
+
     # --- 비동기 작업 기동 슬롯 ---
     def run_detection(self) -> None:
         """백그라운드 스레드를 실행하여 Excel 내 키워드 탐지를 고속으로 수행합니다."""
@@ -76,8 +83,11 @@ class AppController(QObject):
         self._detection_worker = DetectionWorker(
             file_paths=self.state.selected_files,
             student_names=self.state.student_names,
-            school_names=self.state.school_names
+            school_names=self.state.school_names,
+            delete_keywords=self.state.delete_keywords,
+            delete_replacement=self.state.delete_replacement
         )
+
 
         # 시그널 연동
         self._detection_worker.progress_changed.connect(self._on_worker_progress)

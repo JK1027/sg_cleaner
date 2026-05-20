@@ -165,5 +165,57 @@ class TestAnonymizeEngine(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             excel_service.apply_replacements_safe("non_existent.xlsx", [dummy_item], str(self.test_dir))
 
+    def test_delete_mode(self):
+        """삭제(제거) 모드 동작 검증 (대체 텍스트 설정 및 빈 값 치환)"""
+        # 1. '***' 대체 텍스트 테스트
+        detector_star = AnonymizeDetector(
+            student_names=[],
+            school_names=[],
+            delete_keywords=["김민수", "서울중학교"],
+            delete_replacement="***"
+        )
+        results_star = detector_star.scan_workbook(self.test_excel_path)
+        
+        # 매핑 검증
+        mapping_star = detector_star.get_full_mapping()
+        self.assertEqual(mapping_star["김민수"], "***")
+        self.assertEqual(mapping_star["서울중학교"], "***")
+        
+        excel_service = ExcelService()
+        output_dir = str(self.test_dir)
+        final_path_star = excel_service.apply_replacements_safe(self.test_excel_path, results_star, output_dir)
+        
+        # 파일 내용 검증 (*** 치환 확인)
+        wb = openpyxl.load_workbook(final_path_star, data_only=True)
+        ws = wb["학급기록"]
+        self.assertEqual(ws["B2"].value, "***")
+        self.assertEqual(ws["C2"].value, "*** 학생은 *** 과학 탐구반에서 주도적으로 활동함.")
+        wb.close()
+        os.remove(final_path_star)
+
+        # 2. 빈 문자열('') 대체 텍스트 (완전 삭제) 테스트
+        detector_empty = AnonymizeDetector(
+            student_names=[],
+            school_names=[],
+            delete_keywords=["김민수", "서울중학교"],
+            delete_replacement=""
+        )
+        results_empty = detector_empty.scan_workbook(self.test_excel_path)
+        
+        # 매핑 검증
+        mapping_empty = detector_empty.get_full_mapping()
+        self.assertEqual(mapping_empty["김민수"], "")
+        self.assertEqual(mapping_empty["서울중학교"], "")
+        
+        final_path_empty = excel_service.apply_replacements_safe(self.test_excel_path, results_empty, output_dir)
+        
+        # 파일 내용 검증 (공백 제거 확인)
+        wb = openpyxl.load_workbook(final_path_empty, data_only=True)
+        ws = wb["학급기록"]
+        self.assertIn(ws["B2"].value, ("", None)) # 완전히 공백 또는 None
+        self.assertEqual(ws["C2"].value, " 학생은  과학 탐구반에서 주도적으로 활동함.") # 단어 빠짐
+        wb.close()
+        os.remove(final_path_empty)
+
 if __name__ == "__main__":
     unittest.main()

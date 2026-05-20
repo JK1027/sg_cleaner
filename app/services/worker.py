@@ -16,11 +16,14 @@ class DetectionWorker(QThread):
     # (에러 메시지)
     error_occurred = Signal(str)
 
-    def __init__(self, file_paths: list[str], student_names: list[str], school_names: list[str]):
+    def __init__(self, file_paths: list[str], student_names: list[str], school_names: list[str],
+                 delete_keywords: list[str] = None, delete_replacement: str = ""):
         super().__init__()
         self.file_paths = file_paths
         self.student_names = student_names
         self.school_names = school_names
+        self.delete_keywords = delete_keywords or []
+        self.delete_replacement = delete_replacement
 
     def run(self):
         logger.info("백그라운드 탐색 스레드 시작.")
@@ -32,8 +35,13 @@ class DetectionWorker(QThread):
             return
 
         try:
-            # 1단계 탐지용 디텍터 인스턴스 초기화 (이름/학교명 패턴 등록)
-            detector = AnonymizeDetector(self.student_names, self.school_names)
+            # 1단계 탐지용 디텍터 인스턴스 초기화 (이름/학교명/삭제 단어 패턴 등록 및 익명화 옵션 반영)
+            detector = AnonymizeDetector(
+                student_names=self.student_names,
+                school_names=self.school_names,
+                delete_keywords=self.delete_keywords,
+                delete_replacement=self.delete_replacement
+            )
             
             for index, file_path in enumerate(self.file_paths):
                 # 개별 파일 처리 전 진행률 알림

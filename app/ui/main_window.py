@@ -2,7 +2,8 @@ import os
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QListWidget, QPlainTextEdit, QCheckBox,
-    QComboBox, QFileDialog, QProgressBar, QMessageBox, QGroupBox, QSplitter
+    QComboBox, QFileDialog, QProgressBar, QMessageBox, QGroupBox, QSplitter,
+    QLineEdit
 )
 from PySide6.QtCore import Qt, Slot
 from app.controllers.app_controller import AppController
@@ -63,15 +64,29 @@ class MainWindow(QMainWindow):
         pattern_layout.setContentsMargins(12, 18, 12, 12)
         pattern_layout.setSpacing(8)
         
-        pattern_layout.addWidget(QLabel("학생 이름 목록 (쉼표 또는 줄바꿈 구분):"), 0, 0)
+        pattern_layout.addWidget(QLabel("학생 이름 목록 (가명화):"), 0, 0)
         self.txt_students = QPlainTextEdit()
         self.txt_students.setPlaceholderText("예: 김민수, 이서연, 박철수")
         pattern_layout.addWidget(self.txt_students, 1, 0)
         
-        pattern_layout.addWidget(QLabel("학교명 목록 (쉼표 또는 줄바꿈 구분):"), 0, 1)
+        pattern_layout.addWidget(QLabel("학교명 목록 (가명화):"), 0, 1)
         self.txt_schools = QPlainTextEdit()
         self.txt_schools.setPlaceholderText("예: 서울중학교, 한국중학교")
         pattern_layout.addWidget(self.txt_schools, 1, 1)
+
+        pattern_layout.addWidget(QLabel("삭제할 단어 목록 (제거):"), 0, 2)
+        self.txt_delete_keywords = QPlainTextEdit()
+        self.txt_delete_keywords.setPlaceholderText("예: 삭제할단어1, 삭제할단어2")
+        pattern_layout.addWidget(self.txt_delete_keywords, 1, 2)
+        
+        # 삭제 대체 텍스트 입력부
+        delete_rep_layout = QHBoxLayout()
+        delete_rep_layout.addWidget(QLabel("삭제 대체 텍스트:"))
+        self.txt_delete_replacement = QLineEdit()
+        self.txt_delete_replacement.setPlaceholderText("기본값: 공백")
+        self.txt_delete_replacement.setText("")
+        delete_rep_layout.addWidget(self.txt_delete_replacement)
+        pattern_layout.addLayout(delete_rep_layout, 2, 2)
         
         # 옵션 영역
         opt_layout = QHBoxLayout()
@@ -80,18 +95,17 @@ class MainWindow(QMainWindow):
         
         self.combo_mapping_fmt = QComboBox()
         self.combo_mapping_fmt.addItems(["CSV", "EXCEL"])
-        self.combo_mapping_fmt.setEnabled(False) # 체크 시에만 활성화
+        self.combo_mapping_fmt.setEnabled(False)
         
         opt_layout.addWidget(self.chk_save_mapping)
         opt_layout.addWidget(self.combo_mapping_fmt)
         opt_layout.addStretch()
-        
-        pattern_layout.addLayout(opt_layout, 2, 0, 1, 2)
+        pattern_layout.addLayout(opt_layout, 3, 0, 1, 3)
         
         # 탐지 실행 버튼 (QSS 커스텀 스타일 연동을 위한 objectName 설정)
         self.btn_run_detection = QPushButton("개인정보 자동 탐지 실행")
         self.btn_run_detection.setObjectName("btn_run_detection")
-        pattern_layout.addWidget(self.btn_run_detection, 3, 0, 1, 2)
+        pattern_layout.addWidget(self.btn_run_detection, 4, 0, 1, 3)
         
         top_splitter.addWidget(pattern_group)
         main_layout.addWidget(top_splitter, stretch=1)
@@ -134,6 +148,9 @@ class MainWindow(QMainWindow):
         self.chk_save_mapping.toggled.connect(self.on_mapping_check_changed)
         self.combo_mapping_fmt.currentTextChanged.connect(self.on_mapping_format_changed)
         
+        # 삭제 대체 설정 변경 시그널 연결
+        self.txt_delete_replacement.textChanged.connect(self.on_delete_replacement_changed)
+        
         # 테이블 내 수동 편집 중계
         self.preview_table.item_edited.connect(self.on_table_item_edited)
         
@@ -162,17 +179,24 @@ class MainWindow(QMainWindow):
     def on_mapping_format_changed(self, format_text: str):
         self.controller.update_save_options(self.chk_save_mapping.isChecked(), format_text)
 
+    def on_delete_replacement_changed(self, text: str):
+        self.controller.update_delete_replacement(text)
+        
     def on_run_detection_clicked(self):
         students = self.txt_students.toPlainText().replace("\n", ",").split(",")
         schools = self.txt_schools.toPlainText().replace("\n", ",").split(",")
+        delete_keywords = self.txt_delete_keywords.toPlainText().replace("\n", ",").split(",")
         
-        self.controller.update_input_patterns(students, schools)
+        self.controller.update_input_patterns(students, schools, delete_keywords)
+        self.controller.update_delete_replacement(self.txt_delete_replacement.text())
         
         if not self.controller.state.selected_files:
             QMessageBox.warning(self, "입력 부족", "먼저 대상 Excel 파일을 추가해주세요.")
             return
-        if not self.controller.state.student_names and not self.controller.state.school_names:
-            QMessageBox.warning(self, "입력 부족", "탐지할 이름 또는 학교명을 1개 이상 작성해주세요.")
+        if (not self.controller.state.student_names and 
+            not self.controller.state.school_names and 
+            not self.controller.state.delete_keywords):
+            QMessageBox.warning(self, "입력 부족", "탐지할 이름, 학교명 또는 삭제할 단어를 1개 이상 작성해주세요.")
             return
             
         self.controller.run_detection()
@@ -213,8 +237,16 @@ class MainWindow(QMainWindow):
         self.btn_clear_files.setEnabled(not state.is_processing)
         self.txt_students.setEnabled(not state.is_processing)
         self.txt_schools.setEnabled(not state.is_processing)
+        self.txt_delete_keywords.setEnabled(not state.is_processing)
         self.chk_save_mapping.setEnabled(not state.is_processing)
         self.combo_mapping_fmt.setEnabled(not state.is_processing and self.chk_save_mapping.isChecked())
+        
+        # 신호 차단 후 상태 동기화
+        self.txt_delete_replacement.blockSignals(True)
+        self.txt_delete_replacement.setText(state.delete_replacement)
+        self.txt_delete_replacement.blockSignals(False)
+        
+        self.txt_delete_replacement.setEnabled(not state.is_processing)
 
     @Slot(int, str)
     def on_progress_changed(self, percentage: int, message: str):
