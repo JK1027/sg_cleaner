@@ -13,6 +13,40 @@ class ExcelService:
     저장 시 파일 손상을 막기 위한 Safe Save 메커니즘을 실행하는 비즈니스 서비스 클래스.
     """
 
+    @staticmethod
+    def cleanup_temp_folder() -> None:
+        """
+        앱 시작 시 이전 실행에서 잔류한 temp 파일들을 일괄 정리합니다.
+
+        Safe Save 도중 프로세스가 강제 종료(전원 차단, 크래시 등)되면
+        temp/ 폴더에 'temp_' 접두사 파일이 남을 수 있습니다.
+        이 메서드는 앱 시작 시 1회 호출하여 해당 파일들을 안전하게 제거합니다.
+
+        - 'temp_' 접두사가 없는 파일은 건드리지 않습니다. (사용자 파일 보호)
+        - 삭제 실패는 경고 로그만 남기고 앱 구동을 중단하지 않습니다.
+        """
+        temp_dir = get_project_root() / "temp"
+        if not temp_dir.exists():
+            return
+
+        cleaned = 0
+        failed = 0
+        for entry in temp_dir.iterdir():
+            # Safe Save가 생성하는 파일만 선택적으로 삭제 (다른 파일 보호)
+            if entry.is_file() and entry.name.startswith("temp_"):
+                try:
+                    entry.unlink()
+                    cleaned += 1
+                    logger.debug(f"잔류 temp 파일 삭제: {entry.name}")
+                except Exception as e:
+                    failed += 1
+                    logger.warning(f"잔류 temp 파일 삭제 실패 (무시하고 계속): {entry.name} - {str(e)}")
+
+        if cleaned > 0:
+            logger.info(f"앱 시작 시 잔류 temp 파일 {cleaned}개 정리 완료.")
+        if failed > 0:
+            logger.warning(f"잔류 temp 파일 {failed}개 삭제 실패 (수동 정리 권장).")
+
     def apply_replacements_safe(self, file_path: str, replacements: list[DetectionItem], output_dir: str) -> str:
         """
         [Safe Save 4단계 적용 구현]
@@ -51,28 +85,38 @@ class ExcelService:
             
             # 이 파일에 대한 변경 항목 수집
             file_replacements = [r for r in replacements if r.file_path == file_path and r.approved]
-            
+
+            # ⚠️ 연쇄 치환 방지: (시트명, 셀주소) 기준으로 그룹화하여
+            # 동일 셀에 대한 모든 치환을 원본 값 기준으로 한 번에 적용.
+            # 기존 방식은 항목마다 cell.value를 즉시 덮어써서 다음 항목이
+            # 이미 변경된 값을 대상으로 치환하는 연쇄 오염 문제가 있었음.
+            cell_groups: dict[tuple[str, str], list] = {}
             for item in file_replacements:
-                if item.sheet_name in wb.sheetnames:
-                    sheet = wb[item.sheet_name]
-                    # openpyxl은 셀 주소(예: 'B12')로 바로 셀 접근 가능
-                    cell = sheet[item.cell_address]
-                    
-                    # ⚠️ 수식 보호 장치: 수식 셀(첫글자 '=')은 치환 예외
-                    val_str = str(cell.value or "")
-                    if val_str.startswith("="):
-                        logger.warning(f"수식 포함 셀 치환 방지 적용 (스킵됨): {item.sheet_name}!{item.cell_address}")
-                        continue
-                    
-                    # 단순 부분 치환 처리 (원본 문장에서 매칭되는 텍스트를 대체 텍스트로 치환)
-                    # 대소문자나 다중 치환을 고려하여 replace 처리
-                    if cell.value is not None:
-                        current_val = str(cell.value)
-                        new_val = current_val.replace(item.match_value, item.replacement)
-                        cell.value = new_val
-                        logger.debug(f"수정 완료 - {item.sheet_name}!{item.cell_address}: {current_val} -> {new_val}")
-                else:
-                    logger.warning(f"존재하지 않는 시트 무시됨: {item.sheet_name}")
+                key = (item.sheet_name, item.cell_address)
+                cell_groups.setdefault(key, []).append(item)
+
+            for (sheet_name, cell_address), items in cell_groups.items():
+                if sheet_name not in wb.sheetnames:
+                    logger.warning(f"존재하지 않는 시트 무시됨: {sheet_name}")
+                    continue
+
+                sheet = wb[sheet_name]
+                cell = sheet[cell_address]
+
+                # ⚠️ 수식 보호 장치: 수식 셀(첫글자 '=')은 치환 예외
+                val_str = str(cell.value or "")
+                if val_str.startswith("="):
+                    logger.warning(f"수식 포함 셀 치환 방지 적용 (스킵됨): {sheet_name}!{cell_address}")
+                    continue
+
+                if cell.value is not None:
+                    # 셀 값을 한 번만 읽고, 해당 셀의 모든 치환 항목을 순차 적용 후 한 번만 기록
+                    current_val = str(cell.value)
+                    new_val = current_val
+                    for item in items:
+                        new_val = new_val.replace(item.match_value, item.replacement)
+                    cell.value = new_val
+                    logger.debug(f"수정 완료 - {sheet_name}!{cell_address}: {current_val} -> {new_val}")
 
             wb.save(temp_path)
             wb.close()

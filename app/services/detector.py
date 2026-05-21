@@ -2,6 +2,20 @@ import openpyxl
 from app.models.detection_model import DetectionItem
 from app.utils.logger import logger
 
+
+def _make_school_label(n: int) -> str:
+    """
+    1 → 'A', 2 → 'B', ..., 26 → 'Z', 27 → 'AA', 28 → 'AB', ...
+    Excel 컬럼 명명 방식과 동일하게 무제한 확장 가능한 알파벳 레이블 생성.
+    :param n: 1-based 인덱스
+    :return: 알파벳 레이블 문자열
+    """
+    result = ""
+    while n > 0:
+        n, remainder = divmod(n - 1, 26)
+        result = chr(65 + remainder) + result
+    return result
+
 class AnonymizeDetector:
     """
     사용자가 입력한 학생 이름/학교명 패턴 목록에 근거하여 Excel 셀의 텍스트 데이터를 검색 및 탐지하는 엔진.
@@ -91,8 +105,8 @@ class AnonymizeDetector:
                     for school in self.school_names:
                         if school in cell_text:
                             if school not in self.school_mapping:
-                                # A, B, C... 순으로 알파벳 변환 부여
-                                self.school_mapping[school] = f"학교{chr(64 + school_count)}"
+                                # A, B, C... 이후 Z 초과 시 AA, AB... 방식으로 무제한 확장
+                                self.school_mapping[school] = f"학교{_make_school_label(school_count)}"
                                 school_count += 1
                                 
                             item = DetectionItem(

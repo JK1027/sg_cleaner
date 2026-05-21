@@ -4,6 +4,7 @@ from PySide6.QtWidgets import QApplication
 from app.models.app_state import AppState
 from app.controllers.app_controller import AppController
 from app.ui.main_window import MainWindow
+from app.services.excel_service import ExcelService
 from app.utils.logger import logger
 from app.utils.path_helper import get_resource_path
 
@@ -25,7 +26,10 @@ def load_stylesheet(app: QApplication):
 
 def main():
     logger.info("생기부 개인정보 익명화 도구 실행 시작.")
-    
+
+    # 0. 이전 실행에서 잔류한 temp 파일 정리 (Safe Save 비정상 종료 대비)
+    ExcelService.cleanup_temp_folder()
+
     # 1. Qt application 생성
     app = QApplication(sys.argv)
     

@@ -165,9 +165,8 @@ class MainWindow(QMainWindow):
             self, "대상 Excel 파일 선택", "", "Excel Files (*.xlsx)"
         )
         if files:
-            current_files = self.controller.state.selected_files
-            new_files = list(set(current_files + files))
-            self.controller.set_selected_files(new_files)
+            # 파일 병합 로직은 Controller에 위임 (SoC 경계 유지)
+            self.controller.add_files(files)
 
     def on_clear_files_clicked(self):
         self.controller.set_selected_files([])
@@ -190,12 +189,11 @@ class MainWindow(QMainWindow):
         self.controller.update_input_patterns(students, schools, delete_keywords)
         self.controller.update_delete_replacement(self.txt_delete_replacement.text())
         
-        if not self.controller.state.selected_files:
+        # 유효성 검사는 Controller에 위임 (SoC 경계 유지)
+        if not self.controller.has_files():
             QMessageBox.warning(self, "입력 부족", "먼저 대상 Excel 파일을 추가해주세요.")
             return
-        if (not self.controller.state.student_names and 
-            not self.controller.state.school_names and 
-            not self.controller.state.delete_keywords):
+        if not self.controller.can_run_detection():
             QMessageBox.warning(self, "입력 부족", "탐지할 이름, 학교명 또는 삭제할 단어를 1개 이상 작성해주세요.")
             return
             
@@ -208,7 +206,8 @@ class MainWindow(QMainWindow):
             self.controller.update_replacement_text(row, str(value))
 
     def on_save_clicked(self):
-        if not self.controller.state.detection_results:
+        # 저장 가능 여부 검사는 Controller에 위임 (SoC 경계 유지)
+        if not self.controller.can_save():
             QMessageBox.warning(self, "저장 불가", "탐지된 결과가 없습니다. 먼저 탐지를 실행해주세요.")
             return
             

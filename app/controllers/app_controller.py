@@ -30,6 +30,39 @@ class AppController(QObject):
         logger.info(f"선택 파일 리스트 업데이트: {len(file_paths)}개 등록됨.")
         self.state_changed.emit()
 
+    def add_files(self, new_file_paths: list[str]) -> None:
+        """기존 파일 목록에 새 파일을 중복 없이 추가합니다.
+
+        UI가 state.selected_files를 직접 읽어 병합하는 대신
+        이 메서드가 병합 로직을 담당하여 SoC 경계를 유지합니다.
+        """
+        merged = list(set(self.state.selected_files + new_file_paths))
+        self.set_selected_files(merged)
+
+    def has_files(self) -> bool:
+        """처리 대상 파일이 1개 이상 등록되어 있는지 반환합니다."""
+        return bool(self.state.selected_files)
+
+    def can_run_detection(self) -> bool:
+        """탐지 실행 가능 여부를 반환합니다. (파일 및 키워드 유효성 검사)
+
+        UI의 유효성 검사 로직을 Controller로 위임하여 SoC 경계를 유지합니다.
+        """
+        has_files = bool(self.state.selected_files)
+        has_keywords = bool(
+            self.state.student_names
+            or self.state.school_names
+            or self.state.delete_keywords
+        )
+        return has_files and has_keywords
+
+    def can_save(self) -> bool:
+        """저장 실행 가능 여부를 반환합니다. (탐지 결과 존재 여부 검사)
+
+        UI의 유효성 검사 로직을 Controller로 위임하여 SoC 경계를 유지합니다.
+        """
+        return bool(self.state.detection_results)
+
     def update_input_patterns(self, students: list[str], schools: list[str], delete_keywords: list[str]) -> None:
         """사용자가 화면에서 수정한 대상 이름/학교명/삭제 단어 패턴을 갱신합니다."""
         # 공백 제거 및 필터링
@@ -47,19 +80,25 @@ class AppController(QObject):
         self.state_changed.emit()
 
     def update_detection_approval(self, index: int, approved: bool) -> None:
-        """개별 검수 항목의 활성화(체크박스) 여부를 토글합니다."""
+        """개별 검수 항목의 활성화(체크박스) 여부를 토글합니다.
+
+        ※ 테이블은 사용자가 체크박스를 조작한 시점에 이미 시각적으로 올바른 상태이므로
+           state_changed 시그널을 방출하지 않습니다. (전체 테이블 재렌더링 방지)
+        """
         if 0 <= index < len(self.state.detection_results):
             self.state.detection_results[index].approved = approved
             logger.debug(f"항목 #{index} 승인 상태 변경 -> {approved}")
-            self.state_changed.emit()
 
     def update_replacement_text(self, index: int, new_text: str) -> None:
-        """개별 검수 항목의 변경 예정 이름을 업데이트합니다."""
+        """개별 검수 항목의 변경 예정 이름을 업데이트합니다.
+
+        ※ 테이블 셀은 사용자가 직접 편집한 시점에 이미 시각적으로 올바른 상태이므로
+           state_changed 시그널을 방출하지 않습니다. (전체 테이블 재렌더링 방지)
+        """
         if 0 <= index < len(self.state.detection_results):
             old_text = self.state.detection_results[index].replacement
             self.state.detection_results[index].replacement = new_text
             logger.info(f"항목 #{index} 치환명 수정: {old_text} -> {new_text}")
-            self.state_changed.emit()
 
     def update_delete_replacement(self, replacement: str) -> None:
         """삭제 대체 텍스트를 업데이트합니다."""
