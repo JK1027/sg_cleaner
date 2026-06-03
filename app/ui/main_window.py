@@ -187,7 +187,22 @@ class MainWindow(QMainWindow):
         delete_keywords = self.txt_delete_keywords.toPlainText().replace("\n", ",").split(",")
         
         self.controller.update_input_patterns(students, schools, delete_keywords)
-        self.controller.update_delete_replacement(self.txt_delete_replacement.text())
+        
+        # 삭제 대체 텍스트 빈 값 경고 처리
+        delete_rep = self.txt_delete_replacement.text()
+        if self.controller.state.delete_keywords and not delete_rep:
+            reply = QMessageBox.question(
+                self, 
+                "삭제 대체 텍스트 확인",
+                "삭제 단어 목록이 입력되었으나 삭제 대체 텍스트가 비어 있습니다.\n"
+                "선택한 삭제 단어들이 문서에서 완전히 제거(공백 처리)됩니다. 진행하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
+        self.controller.update_delete_replacement(delete_rep)
         
         # 유효성 검사는 Controller에 위임 (SoC 경계 유지)
         if not self.controller.has_files():

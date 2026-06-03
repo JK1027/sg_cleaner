@@ -22,10 +22,10 @@ class AnonymizeDetector:
     """
     def __init__(self, student_names: list[str], school_names: list[str],
                  delete_keywords: list[str] = None, delete_replacement: str = ""):
-        # 공백 제거 및 중복 제거 처리
-        self.student_names = list(set([name.strip() for name in student_names if name.strip()]))
-        self.school_names = list(set([school.strip() for school in school_names if school.strip()]))
-        self.delete_keywords = list(set([word.strip() for word in (delete_keywords or []) if word.strip()]))
+        # 공백 제거 및 중복 제거 처리 (순서 보존)
+        self.student_names = list(dict.fromkeys([name.strip() for name in student_names if name.strip()]))
+        self.school_names = list(dict.fromkeys([school.strip() for school in school_names if school.strip()]))
+        self.delete_keywords = list(dict.fromkeys([word.strip() for word in (delete_keywords or []) if word.strip()]))
         self.delete_replacement = delete_replacement
         
         # 탐색 과정 중 고유한 익명화 대체 이름(예: 학생1, 학교A)을 관리하기 위한 매핑 저장소

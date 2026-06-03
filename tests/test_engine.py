@@ -217,5 +217,42 @@ class TestAnonymizeEngine(unittest.TestCase):
         wb.close()
         os.remove(final_path_empty)
 
+    def test_keyword_conflict_and_order_determinism(self):
+        """키워드 충돌 시 우선순위 필터링 및 탐색 순서 결정성 검증"""
+        from app.models.app_state import AppState
+        from app.controllers.app_controller import AppController
+        
+        state = AppState()
+        controller = AppController(state)
+        
+        # 1. 중복/충돌 키워드 입력
+        # '김민수'가 학생명, 학교명, 삭제 단어에 모두 존재
+        # '서울중학교'가 학교명, 삭제 단어에 존재
+        students = ["김민수", "이서연", "김민수"]
+        schools = ["서울중학교", "김민수", "서울중학교"]
+        deletes = ["김민수", "서울중학교", "삭제어1"]
+        
+        controller.update_input_patterns(students, schools, deletes)
+        
+        # 중복 제거 및 우선순위 필터링 검증
+        # 학생명: ['김민수', '이서연']
+        # 학교명: ['서울중학교'] ('김민수'는 학생명이므로 제거됨)
+        # 삭제어: ['삭제어1'] ('김민수', '서울중학교'는 학생명/학교명이므로 제거됨)
+        self.assertEqual(state.student_names, ["김민수", "이서연"])
+        self.assertEqual(state.school_names, ["서울중학교"])
+        self.assertEqual(state.delete_keywords, ["삭제어1"])
+        
+        # 2. 결정성(Determinism) 검증 (입력 순서가 매핑 인덱스 순서에 영향을 미치는지 확인)
+        detector = AnonymizeDetector(
+            student_names=["김민수", "이서연"],
+            school_names=["서울중학교"]
+        )
+        detector.scan_workbook(self.test_excel_path)
+        mapping = detector.get_full_mapping()
+        
+        # 순서가 뒤집히지 않고 입력된 순서대로 인덱싱 부여
+        self.assertEqual(mapping["김민수"], "학생1")
+        self.assertEqual(mapping["이서연"], "학생2")
+
 if __name__ == "__main__":
     unittest.main()
