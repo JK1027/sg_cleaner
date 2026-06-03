@@ -182,6 +182,9 @@ class MainWindow(QMainWindow):
         self.controller.update_delete_replacement(text)
         
     def on_run_detection_clicked(self):
+        # 강제 포커스 해제하여 편집 중인 셀 값 적용 유도
+        self.preview_table.clearFocus()
+        
         students = self.txt_students.toPlainText().replace("\n", ",").split(",")
         schools = self.txt_schools.toPlainText().replace("\n", ",").split(",")
         delete_keywords = self.txt_delete_keywords.toPlainText().replace("\n", ",").split(",")
@@ -221,6 +224,9 @@ class MainWindow(QMainWindow):
             self.controller.update_replacement_text(row, str(value))
 
     def on_save_clicked(self):
+        # 강제 포커스 해제하여 편집 중인 셀 값 적용 유도
+        self.preview_table.clearFocus()
+        
         # 저장 가능 여부 검사는 Controller에 위임 (SoC 경계 유지)
         if not self.controller.can_save():
             QMessageBox.warning(self, "저장 불가", "탐지된 결과가 없습니다. 먼저 탐지를 실행해주세요.")
@@ -245,6 +251,7 @@ class MainWindow(QMainWindow):
         self.preview_table.populate_data(state.detection_results)
         
         # ⚠️ UI 제어 상태 비활성화 제어 (처리 중일 때 입력 락 적용하여 오동작 예방)
+        self.preview_table.setEnabled(not state.is_processing)
         self.btn_run_detection.setEnabled(not state.is_processing)
         self.btn_save.setEnabled(not state.is_processing and len(state.detection_results) > 0)
         self.btn_add_files.setEnabled(not state.is_processing)

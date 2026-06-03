@@ -1,3 +1,4 @@
+import os
 from PySide6.QtCore import QThread, Signal
 from app.services.detector import AnonymizeDetector
 from app.services.excel_service import ExcelService
@@ -112,7 +113,7 @@ class AnonymizeWorker(QThread):
                 
                 # 파일 확장자 추가
                 mapping_ext = ".csv" if self.mapping_format.upper() == "CSV" else ".xlsx"
-                mapping_path = f"{self.output_dir}/익명화_매핑_대장{mapping_ext}"
+                mapping_path = os.path.join(self.output_dir, f"익명화_매핑_대장{mapping_ext}")
                 
                 excel_service.save_mapping_file(unique_mappings, mapping_path, self.mapping_format)
                 

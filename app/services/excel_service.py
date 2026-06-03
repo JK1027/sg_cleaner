@@ -78,6 +78,7 @@ class ExcelService:
         logger.info(f"[Safe Save 1단계] 임시 복사 파일 생성: {temp_path}")
         shutil.copy2(file_path, temp_path)
 
+        wb = None
         try:
             # 2. openpyxl을 통한 서식 보존 셀 수정
             logger.info(f"[Safe Save 2단계] 셀 수정 반영 중: {file_name}")
@@ -119,7 +120,6 @@ class ExcelService:
                     logger.debug(f"수정 완료 - {sheet_name}!{cell_address}: {current_val} -> {new_val}")
 
             wb.save(temp_path)
-            wb.close()
             logger.info("[Safe Save 2단계] 임시 수정 저장 성공.")
 
             # 3. 임시 파일 무결성 검증 (Open Test)
@@ -156,6 +156,12 @@ class ExcelService:
                 except Exception as clean_err:
                     logger.error(f"실패 복구 중 임시 파일 삭제 실패: {str(clean_err)}")
             raise e
+        finally:
+            if wb is not None:
+                try:
+                    wb.close()
+                except Exception as close_err:
+                    logger.error(f"임시 workbook 자원 해제(close) 실패: {str(close_err)}")
 
     def save_mapping_file(self, mapping_data: dict[str, str], output_path: str, format_type: str) -> None:
         """
