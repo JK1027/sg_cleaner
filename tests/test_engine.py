@@ -254,5 +254,44 @@ class TestAnonymizeEngine(unittest.TestCase):
         self.assertEqual(mapping["김민수"], "학생1")
         self.assertEqual(mapping["이서연"], "학생2")
 
+    def test_substring_overlap_prevention(self):
+        """동일 셀 내 부분 문자열 중복 매칭 차단 알고리즘 검증"""
+        # '김민수'와 '민수'가 동시에 패턴으로 등록됨
+        detector = AnonymizeDetector(
+            student_names=["김민수", "민수"],
+            school_names=[]
+        )
+        
+        results = detector.scan_workbook(self.test_excel_path)
+        
+        # '민수'에 대한 개별 매칭이 중복 생성되었는지 검증 (김민수만 매칭되어야 함)
+        match_values = [item.match_value for item in results]
+        self.assertIn("김민수", match_values)
+        self.assertNotIn("민수", match_values) # 민수는 김민수의 부분 문자열이므로 오버랩 제외 확인
+
+    def test_worker_cancellation(self):
+        """QThread 백그라운드 Worker 스레드 작업 취소 및 안전 재구동 검증"""
+        from app.services.worker import DetectionWorker
+        
+        worker = DetectionWorker(
+            file_paths=[self.test_excel_path],
+            student_names=["김민수"],
+            school_names=["서울중학교"]
+        )
+        
+        # 작업 취소 설정
+        worker.cancel()
+        
+        # 취소 이벤트가 수신 및 기록되어 finished 대신 error_occurred가 불리는지 확인하는 모의 슬롯
+        error_called = []
+        def on_error(msg):
+            error_called.append(msg)
+            
+        worker.error_occurred.connect(on_error)
+        worker.run() # 동기식 run() 구동으로 취소 플래그 인터셉트 동작 테스트
+        
+        self.assertTrue(len(error_called) > 0)
+        self.assertIn("취소", error_called[0])
+
 if __name__ == "__main__":
     unittest.main()

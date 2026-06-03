@@ -127,11 +127,17 @@ class MainWindow(QMainWindow):
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(False)
         
+        # 작업 취소 버튼 추가
+        self.btn_cancel = QPushButton("작업 취소")
+        self.btn_cancel.setObjectName("btn_cancel")
+        self.btn_cancel.setVisible(False)
+        
         # 저장 버튼 (QSS 커스텀 스타일 연동을 위한 objectName 설정)
         self.btn_save = QPushButton("익명화 결과 파일 최종 저장")
         self.btn_save.setObjectName("btn_save")
         
         control_layout.addWidget(self.progress_bar, stretch=1)
+        control_layout.addWidget(self.btn_cancel)
         control_layout.addWidget(self.btn_save)
         main_layout.addLayout(control_layout)
         
@@ -153,6 +159,9 @@ class MainWindow(QMainWindow):
         
         # 테이블 내 수동 편집 중계
         self.preview_table.item_edited.connect(self.on_table_item_edited)
+        
+        # 취소 버튼 연결
+        self.btn_cancel.clicked.connect(self.on_cancel_clicked)
         
         # 컨트롤러의 상태 피드백 구독
         self.controller.state_changed.connect(self.on_state_changed)
@@ -217,11 +226,19 @@ class MainWindow(QMainWindow):
             
         self.controller.run_detection()
 
-    def on_table_item_edited(self, row: int, field_name: str, value: object):
+    def on_cancel_clicked(self):
+        self.btn_cancel.setEnabled(False)
+        self.statusBar().showMessage("취소 중... 잠시만 기다려주세요.")
+        self.controller.cancel_processing()
+
+    def on_table_item_edited(self, item_id: str, field_name: str, value: object):
         if field_name == "approved":
-            self.controller.update_detection_approval(row, bool(value))
+            self.controller.update_detection_approval(item_id, bool(value))
+            # 전체 테이블 재지정 없이 저장 버튼 활성 상태만 동적으로 실시간 업데이트
+            has_approved = any(item.approved for item in self.controller.state.detection_results)
+            self.btn_save.setEnabled(not self.controller.state.is_processing and has_approved)
         elif field_name == "replacement":
-            self.controller.update_replacement_text(row, str(value))
+            self.controller.update_replacement_text(item_id, str(value))
 
     def on_save_clicked(self):
         # 강제 포커스 해제하여 편집 중인 셀 값 적용 유도
@@ -247,13 +264,22 @@ class MainWindow(QMainWindow):
         for f in state.selected_files:
             self.file_list.addItem(os.path.basename(f))
             
-        # 테이블 데이터 리프레시
+        # 테이블 데이터 리프레시 (스크롤 위치 백업 후 복원)
+        scroll_val = self.preview_table.verticalScrollBar().value()
         self.preview_table.populate_data(state.detection_results)
+        self.preview_table.verticalScrollBar().setValue(scroll_val)
         
         # ⚠️ UI 제어 상태 비활성화 제어 (처리 중일 때 입력 락 적용하여 오동작 예방)
         self.preview_table.setEnabled(not state.is_processing)
         self.btn_run_detection.setEnabled(not state.is_processing)
-        self.btn_save.setEnabled(not state.is_processing and len(state.detection_results) > 0)
+        
+        # 저장 버튼 활성화 조건: 처리 중이 아니며, 최소 1개 이상 항목이 승인됨
+        has_approved = any(item.approved for item in state.detection_results)
+        self.btn_save.setEnabled(not state.is_processing and has_approved)
+        
+        # 진행 상태에 따라 취소 버튼 동적 제어
+        self.btn_cancel.setVisible(state.is_processing)
+        self.btn_cancel.setEnabled(state.is_processing)
         self.btn_add_files.setEnabled(not state.is_processing)
         self.btn_clear_files.setEnabled(not state.is_processing)
         self.txt_students.setEnabled(not state.is_processing)
@@ -283,3 +309,10 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "완료", msg)
         else:
             QMessageBox.critical(self, "오류", msg)
+            
+    def closeEvent(self, event):
+        """창을 닫을 때 백그라운드 스레드가 실행 중이면 안전하게 취소 요청을 보냅니다."""
+        if self.controller.state.is_processing:
+            self.controller.cancel_processing()
+            logger.info("창 닫기 감지: 실행 중인 작업을 정상 취소 완료했습니다.")
+        event.accept()

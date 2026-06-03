@@ -25,6 +25,11 @@ class DetectionWorker(QThread):
         self.school_names = school_names
         self.delete_keywords = delete_keywords or []
         self.delete_replacement = delete_replacement
+        self._is_canceled = False
+
+    def cancel(self):
+        """작업 취소 플래그를 설정합니다."""
+        self._is_canceled = True
 
     def run(self):
         logger.info("백그라운드 탐색 스레드 시작.")
@@ -45,6 +50,10 @@ class DetectionWorker(QThread):
             )
             
             for index, file_path in enumerate(self.file_paths):
+                if self._is_canceled:
+                    logger.info("백그라운드 탐색 작업이 사용자에 의해 취소되었습니다.")
+                    self.error_occurred.emit("사용자가 작업을 취소했습니다.")
+                    return
                 # 개별 파일 처리 전 진행률 알림
                 percentage = int((index / total_files) * 100)
                 file_name = file_path.split("/")[-1].split("\\")[-1]
@@ -81,6 +90,11 @@ class AnonymizeWorker(QThread):
         self.output_dir = output_dir
         self.save_mapping = save_mapping
         self.mapping_format = mapping_format
+        self._is_canceled = False
+
+    def cancel(self):
+        """작업 취소 플래그를 설정합니다."""
+        self._is_canceled = True
 
     def run(self):
         logger.info("백그라운드 익명화 저장 스레드 시작.")
@@ -94,6 +108,10 @@ class AnonymizeWorker(QThread):
         try:
             # 1. 파일별 Safe Save 익명화 진행
             for index, file_path in enumerate(self.selected_files):
+                if self._is_canceled:
+                    logger.info("백그라운드 익명화 작업이 사용자에 의해 취소되었습니다.")
+                    self.finished.emit(False, "사용자가 작업을 취소했습니다.")
+                    return
                 percentage = int((index / total_files) * 90) # 매핑 전까지 90% 반영
                 file_name = file_path.split("/")[-1].split("\\")[-1]
                 self.progress_changed.emit(percentage, f"{file_name} 익명화 적용 중...")

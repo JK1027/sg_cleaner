@@ -46,6 +46,7 @@ class PreviewTable(QTableWidget):
             # 1. 시트명 (수정 불가)
             sheet_item = QTableWidgetItem(item.sheet_name)
             sheet_item.setFlags(sheet_item.flags() & ~Qt.ItemIsEditable)
+            sheet_item.setData(Qt.UserRole, item.item_id) # 고유 ID 바인딩
             self.setItem(idx, 0, sheet_item)
             
             # 2. 셀 주소 (수정 불가)
@@ -66,8 +67,8 @@ class PreviewTable(QTableWidget):
             # 5. 적용 여부 체크박스 (레이아웃 중앙 배치)
             checkbox = QCheckBox()
             checkbox.setChecked(item.approved)
-            # 람다 캡처 바인딩 주의 (index 바인딩)
-            checkbox.toggled.connect(lambda checked, r=idx: self.on_checkbox_toggled(r, checked))
+            checkbox.setProperty("item_id", item.item_id) # 고유 ID 바인딩
+            checkbox.toggled.connect(self.on_checkbox_widget_toggled)
             
             cell_widget = QWidget()
             layout = QHBoxLayout(cell_widget)
@@ -79,7 +80,7 @@ class PreviewTable(QTableWidget):
             self.setCellWidget(idx, 4, cell_widget)
             
         self.blockSignals(False)
-
+ 
     def on_cell_changed(self, item: QTableWidgetItem):
         """테이블 셀 텍스트가 수동 수정되었을 때 실행"""
         row = item.row()
@@ -87,10 +88,17 @@ class PreviewTable(QTableWidget):
         
         if col == 3: # '변경 예정' 컬럼 수정 시
             new_text = item.text()
-            self.item_edited.emit(row, "replacement", new_text)
-            logger.debug(f"테이블 수동 수정 반영 요청 - 행 {row}: {new_text}")
-
-    def on_checkbox_toggled(self, row: int, checked: bool):
+            # 0번 컬럼 아이템에서 item_id를 읽어옴
+            sheet_item = self.item(row, 0)
+            if sheet_item:
+                item_id = sheet_item.data(Qt.UserRole)
+                self.item_edited.emit(item_id, "replacement", new_text)
+                logger.debug(f"테이블 수동 수정 반영 요청 - ID {item_id}: {new_text}")
+ 
+    def on_checkbox_widget_toggled(self, checked: bool):
         """적용 여부 체크박스가 토글되었을 때 실행"""
-        self.item_edited.emit(row, "approved", checked)
-        logger.debug(f"테이블 체크박스 토글 반영 요청 - 행 {row}: {checked}")
+        checkbox = self.sender()
+        if checkbox:
+            item_id = checkbox.property("item_id")
+            self.item_edited.emit(item_id, "approved", checked)
+            logger.debug(f"테이블 체크박스 토글 반영 요청 - ID {item_id}: {checked}")

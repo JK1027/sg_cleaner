@@ -138,10 +138,14 @@ class ExcelService:
             final_file_name = f"{base_name}_anonymized{ext}"
             final_path = os.path.join(output_dir, final_file_name)
             
-            logger.info(f"[Safe Save 4단계] 임시 파일을 최종 위치로 이동: {final_path}")
-            if os.path.exists(final_path):
-                os.remove(final_path) # 기존 파일이 있으면 삭제 후 이동
+            # 기존 결과 덮어쓰기 방지: 중복 파일명 존재 시 (1), (2) 등 숫자를 순차적으로 부여
+            counter = 1
+            while os.path.exists(final_path):
+                final_file_name = f"{base_name}_anonymized({counter}){ext}"
+                final_path = os.path.join(output_dir, final_file_name)
+                counter += 1
                 
+            logger.info(f"[Safe Save 4단계] 임시 파일을 최종 위치로 이동: {final_path}")
             shutil.move(temp_path, final_path)
             logger.info(f"Safe Save 프로세스 정상 완료: {final_path}")
             return final_path

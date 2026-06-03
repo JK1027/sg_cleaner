@@ -20,6 +20,7 @@ class AppController(QObject):
         self.state = state
         self._detection_worker = None
         self._anonymize_worker = None
+        self._item_map = {} # O(1) 조회를 위한 UUID 매핑 딕셔너리
         logger.info("AppController가 초기화 및 실제 연동 모드로 전환되었습니다.")
 
     def set_selected_files(self, file_paths: list[str]) -> None:
@@ -27,6 +28,7 @@ class AppController(QObject):
         self.state.selected_files = file_paths
         # 파일이 변경되면 기존 탐지 결과도 안전하게 초기화합니다.
         self.state.detection_results = []
+        self._item_map = {}
         logger.info(f"선택 파일 리스트 업데이트: {len(file_paths)}개 등록됨.")
         self.state_changed.emit()
 
@@ -106,32 +108,48 @@ class AppController(QObject):
         logger.info(f"대장 저장 옵션 변경: 저장={save_mapping}, 형식={mapping_format}")
         self.state_changed.emit()
 
-    def update_detection_approval(self, index: int, approved: bool) -> None:
+    def update_detection_approval(self, item_id: str, approved: bool) -> None:
         """개별 검수 항목의 활성화(체크박스) 여부를 토글합니다.
 
         ※ 테이블은 사용자가 체크박스를 조작한 시점에 이미 시각적으로 올바른 상태이므로
            state_changed 시그널을 방출하지 않습니다. (전체 테이블 재렌더링 방지)
         """
-        if 0 <= index < len(self.state.detection_results):
-            self.state.detection_results[index].approved = approved
-            logger.debug(f"항목 #{index} 승인 상태 변경 -> {approved}")
+        item = self._item_map.get(item_id)
+        if item:
+            item.approved = approved
+            logger.debug(f"항목 {item_id} 승인 상태 변경 -> {approved}")
 
-    def update_replacement_text(self, index: int, new_text: str) -> None:
+    def update_replacement_text(self, item_id: str, new_text: str) -> None:
         """개별 검수 항목의 변경 예정 이름을 업데이트합니다.
 
         ※ 테이블 셀은 사용자가 직접 편집한 시점에 이미 시각적으로 올바른 상태이므로
            state_changed 시그널을 방출하지 않습니다. (전체 테이블 재렌더링 방지)
         """
-        if 0 <= index < len(self.state.detection_results):
-            old_text = self.state.detection_results[index].replacement
-            self.state.detection_results[index].replacement = new_text
-            logger.info(f"항목 #{index} 치환명 수정: {old_text} -> {new_text}")
+        item = self._item_map.get(item_id)
+        if item:
+            old_text = item.replacement
+            item.replacement = new_text
+            logger.info(f"항목 {item_id} 치환명 수정: {old_text} -> {new_text}")
 
     def update_delete_replacement(self, replacement: str) -> None:
         """삭제 대체 텍스트를 업데이트합니다."""
         self.state.delete_replacement = replacement
         logger.info(f"삭제 대체 텍스트 변경: '{replacement}'")
         self.state_changed.emit()
+
+    def cancel_processing(self) -> None:
+        """현재 진행 중인 백그라운드 작업을 중단(취소) 요청합니다."""
+        if not self.state.is_processing:
+            return
+            
+        logger.info("사용자에 의한 백그라운드 작업 취소 요청 접수.")
+        self.state.status_message = "취소 중... 잠시만 기다려주세요."
+        self.state_changed.emit()
+        
+        if self._detection_worker and self._detection_worker.isRunning():
+            self._detection_worker.cancel()
+        if self._anonymize_worker and self._anonymize_worker.isRunning():
+            self._anonymize_worker.cancel()
 
     # --- 비동기 작업 기동 슬롯 ---
     def run_detection(self) -> None:
@@ -209,6 +227,7 @@ class AppController(QObject):
     def _on_detection_finished(self, results: list):
         """탐지 완료 슬롯"""
         self.state.detection_results = results
+        self._item_map = {item.item_id: item for item in results} # O(1) 딕셔너리 매핑 빌드
         self.state.is_processing = False
         self.state.progress_percentage = 100
         self.state.status_message = f"탐지 완료 (검출 건수: {len(results)}건)"

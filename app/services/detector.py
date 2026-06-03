@@ -81,63 +81,89 @@ class AnonymizeDetector:
                     if cell_text.startswith("="):
                         continue
                         
-                    # 1. 학생 이름 매칭 (정합 검색 및 치환 관계 구성)
+                    # 모든 검색 패턴 통합 및 길이 역순 정렬
+                    patterns = []
                     for name in self.student_names:
-                        if name in cell_text:
-                            # 이 이름에 대한 익명화 매핑이 아직 없으면 새로 생성
-                            if name not in self.student_mapping:
-                                self.student_mapping[name] = f"학생{student_count}"
-                                student_count += 1
-                                
-                            item = DetectionItem(
-                                file_path=file_path,
-                                sheet_name=sheet_name,
-                                cell_address=cell.coordinate,
-                                original_value=cell_text,
-                                match_value=name,
-                                replacement=self.student_mapping[name],
-                                approved=True
-                            )
-                            results.append(item)
-                            logger.debug(f"이름 탐지: {cell.coordinate} -> {name}")
-
-                    # 2. 학교명 매칭
+                        patterns.append((name, "student"))
                     for school in self.school_names:
-                        if school in cell_text:
-                            if school not in self.school_mapping:
-                                # A, B, C... 이후 Z 초과 시 AA, AB... 방식으로 무제한 확장
-                                self.school_mapping[school] = f"학교{_make_school_label(school_count)}"
-                                school_count += 1
-                                
-                            item = DetectionItem(
-                                file_path=file_path,
-                                sheet_name=sheet_name,
-                                cell_address=cell.coordinate,
-                                original_value=cell_text,
-                                match_value=school,
-                                replacement=self.school_mapping[school],
-                                approved=True
-                            )
-                            results.append(item)
-                            logger.debug(f"학교명 탐지: {cell.coordinate} -> {school}")
-
-                    # 3. 삭제할 단어 매칭
+                        patterns.append((school, "school"))
                     for word in self.delete_keywords:
-                        if word in cell_text:
-                            if word not in self.delete_mapping:
-                                self.delete_mapping[word] = self.delete_replacement
+                        patterns.append((word, "delete"))
+                        
+                    patterns.sort(key=lambda x: len(x[0]), reverse=True)
+                    
+                    matched_intervals = [] # list of (start_idx, end_idx)
+                    
+                    for pattern, pat_type in patterns:
+                        start_find = 0
+                        while True:
+                            idx = cell_text.find(pattern, start_find)
+                            if idx == -1:
+                                break
+                            
+                            pat_len = len(pattern)
+                            end_idx = idx + pat_len
+                            
+                            # 기존에 매칭된 구간과 겹치는지 체크
+                            overlap = False
+                            for m_start, m_end in matched_intervals:
+                                if not (end_idx <= m_start or idx >= m_end):
+                                    overlap = True
+                                    break
+                                    
+                            if not overlap:
+                                matched_intervals.append((idx, end_idx))
                                 
-                            item = DetectionItem(
-                                file_path=file_path,
-                                sheet_name=sheet_name,
-                                cell_address=cell.coordinate,
-                                original_value=cell_text,
-                                match_value=word,
-                                replacement=self.delete_mapping[word],
-                                approved=True
-                            )
-                            results.append(item)
-                            logger.debug(f"삭제 단어 탐지: {cell.coordinate} -> {word}")
+                                # 매칭 데이터 생성
+                                if pat_type == "student":
+                                    if pattern not in self.student_mapping:
+                                        self.student_mapping[pattern] = f"학생{student_count}"
+                                        student_count += 1
+                                    item = DetectionItem(
+                                        file_path=file_path,
+                                        sheet_name=sheet_name,
+                                        cell_address=cell.coordinate,
+                                        original_value=cell_text,
+                                        match_value=pattern,
+                                        replacement=self.student_mapping[pattern],
+                                        approved=True
+                                    )
+                                    results.append(item)
+                                    logger.debug(f"이름 탐지: {cell.coordinate} -> {pattern}")
+                                    
+                                elif pat_type == "school":
+                                    if pattern not in self.school_mapping:
+                                        self.school_mapping[pattern] = f"학교{_make_school_label(school_count)}"
+                                        school_count += 1
+                                    item = DetectionItem(
+                                        file_path=file_path,
+                                        sheet_name=sheet_name,
+                                        cell_address=cell.coordinate,
+                                        original_value=cell_text,
+                                        match_value=pattern,
+                                        replacement=self.school_mapping[pattern],
+                                        approved=True
+                                    )
+                                    results.append(item)
+                                    logger.debug(f"학교명 탐지: {cell.coordinate} -> {pattern}")
+                                    
+                                elif pat_type == "delete":
+                                    if pattern not in self.delete_mapping:
+                                        self.delete_mapping[pattern] = self.delete_replacement
+                                    item = DetectionItem(
+                                        file_path=file_path,
+                                        sheet_name=sheet_name,
+                                        cell_address=cell.coordinate,
+                                        original_value=cell_text,
+                                        match_value=pattern,
+                                        replacement=self.delete_mapping[pattern],
+                                        approved=True
+                                    )
+                                    results.append(item)
+                                    logger.debug(f"삭제 단어 탐지: {cell.coordinate} -> {pattern}")
+                                    
+                            # 해당 위치 다음부터 검색 지속
+                            start_find = idx + 1
 
         wb.close()
         logger.info(f"스캔 완료: {file_path} (탐색 개수: {len(results)}개)")
