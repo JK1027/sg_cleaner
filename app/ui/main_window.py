@@ -42,7 +42,7 @@ class MainWindow(QMainWindow):
         top_splitter.setChildrenCollapsible(False)
         
         # 1-A. 파일 선택 그룹
-        file_group = QGroupBox("1. 대상 Excel 파일 선택")
+        file_group = QGroupBox("1. 대상 문서 파일 선택")
         file_layout = QVBoxLayout(file_group)
         file_layout.setContentsMargins(12, 18, 12, 12)
         
@@ -171,7 +171,10 @@ class MainWindow(QMainWindow):
     # --- UI 이벤트 슬롯 ---
     def on_add_files_clicked(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "대상 Excel 파일 선택", "", "Excel Files (*.xlsx)"
+            self, 
+            "대상 문서 파일 선택", 
+            "", 
+            "All Supported Files (*.xlsx *.hwp *.hwpx);;Excel Files (*.xlsx);;Hangul Files (*.hwp *.hwpx)"
         )
         if files:
             # 파일 병합 로직은 Controller에 위임 (SoC 경계 유지)
@@ -218,7 +221,7 @@ class MainWindow(QMainWindow):
         
         # 유효성 검사는 Controller에 위임 (SoC 경계 유지)
         if not self.controller.has_files():
-            QMessageBox.warning(self, "입력 부족", "먼저 대상 Excel 파일을 추가해주세요.")
+            QMessageBox.warning(self, "입력 부족", "먼저 대상 문서 파일을 추가해주세요.")
             return
         if not self.controller.can_run_detection():
             QMessageBox.warning(self, "입력 부족", "탐지할 이름, 학교명 또는 삭제할 단어를 1개 이상 작성해주세요.")

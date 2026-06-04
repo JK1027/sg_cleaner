@@ -1,13 +1,14 @@
 import os
 from PySide6.QtCore import QThread, Signal
 from app.services.detector import AnonymizeDetector
-from app.services.excel_service import ExcelService
+from app.services.excel_service import ExcelService, PROCESSORS
 from app.models.detection_model import DetectionItem
 from app.utils.logger import logger
+from app.utils.notification_helper import NotificationHelper
 
 class DetectionWorker(QThread):
     """
-    Excel 파일들을 순차적으로 열어 개인정보를 자동 스캔하는 백그라운드 스레드.
+    다양한 문서 파일들을 순차적으로 열어 개인정보를 자동 스캔하는 백그라운드 스레드.
     스캔율(0~100) 및 최종 수집 리스트를 메인 스레드(UI)에 전달합니다.
     """
     # (진행률 %, 상태 메시지)
@@ -59,16 +60,34 @@ class DetectionWorker(QThread):
                 file_name = file_path.split("/")[-1].split("\\")[-1]
                 self.progress_changed.emit(percentage, f"{file_name} 탐색 중...")
                 
-                # 파일 스캔
-                file_results = detector.scan_workbook(file_path)
+                # 확장자 파악 및 프로세서 라우팅
+                ext = os.path.splitext(file_path)[1].lower()
+                processor_cls = PROCESSORS.get(ext)
+                if not processor_cls:
+                    raise ValueError(f"지원하지 않는 파일 형식입니다: {ext}")
+                
+                processor = processor_cls()
+                
+                # 텍스트 추출 및 매칭 스캔 수행
+                extracted_texts = processor.extract_texts(file_path)
+                file_results = detector.scan_text_items(extracted_texts, file_path)
                 detected_items.extend(file_results)
                 
             # 완료 알림
             self.progress_changed.emit(100, "탐색 완료")
+            NotificationHelper.show_notification(
+                "개인정보 탐색 완료",
+                f"총 {len(detected_items)}건의 개인정보가 탐색되었습니다. 테이블에서 확인해 주세요."
+            )
             self.finished.emit(detected_items)
             
         except Exception as e:
             logger.error(f"백그라운드 스캔 중 오류 발생: {str(e)}", exc_info=True)
+            NotificationHelper.show_notification(
+                "개인정보 탐색 오류",
+                f"스캔 도중 오류가 발생했습니다: {str(e)}",
+                is_error=True
+            )
             self.error_occurred.emit(f"스캔 오류: {str(e)}")
 
 
@@ -136,8 +155,17 @@ class AnonymizeWorker(QThread):
                 excel_service.save_mapping_file(unique_mappings, mapping_path, self.mapping_format)
                 
             self.progress_changed.emit(100, "작업 저장 완료")
+            NotificationHelper.show_notification(
+                "익명화 완료",
+                "익명화 및 파일 저장이 안전하게 완료되었습니다."
+            )
             self.finished.emit(True, "익명화 및 파일 저장이 안전하게 완료되었습니다.")
             
         except Exception as e:
             logger.error(f"백그라운드 익명화 실행 오류: {str(e)}", exc_info=True)
+            NotificationHelper.show_notification(
+                "익명화 실패",
+                f"익명화 처리 중 실패: {str(e)}",
+                is_error=True
+            )
             self.finished.emit(False, f"익명화 실패: {str(e)}")

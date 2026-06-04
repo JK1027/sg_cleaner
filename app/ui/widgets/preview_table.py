@@ -12,7 +12,7 @@ class PreviewTable(QTableWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.headers = ["시트", "셀 위치", "원본 텍스트", "변경 예정", "적용 여부"]
+        self.headers = ["구역/시트", "상세 위치", "문맥 미리보기", "원본 텍스트", "변경 예정", "적용 여부"]
         self.init_ui()
 
     def init_ui(self):
@@ -23,11 +23,12 @@ class PreviewTable(QTableWidget):
         # 테이블 행동 규칙 설정
         self.setAlternatingRowColors(True)
         self.horizontalHeader().setStretchLastSection(False)
-        self.setColumnWidth(0, 100) # 시트
-        self.setColumnWidth(1, 80)  # 셀 위치
-        self.setColumnWidth(2, 280) # 원본 텍스트
-        self.setColumnWidth(3, 120) # 변경 예정
-        self.setColumnWidth(4, 80)  # 적용 여부
+        self.setColumnWidth(0, 100) # 구역/시트
+        self.setColumnWidth(1, 80)  # 상세 위치
+        self.setColumnWidth(2, 280) # 문맥 미리보기
+        self.setColumnWidth(3, 200) # 원본 텍스트
+        self.setColumnWidth(4, 120) # 변경 예정
+        self.setColumnWidth(5, 80)  # 적용 여부
         
         # 테이블 내 개별 수정 이벤트 연결
         self.itemChanged.connect(self.on_cell_changed)
@@ -43,28 +44,33 @@ class PreviewTable(QTableWidget):
         for idx, item in enumerate(items):
             self.insertRow(idx)
             
-            # 1. 시트명 (수정 불가)
-            sheet_item = QTableWidgetItem(item.sheet_name)
-            sheet_item.setFlags(sheet_item.flags() & ~Qt.ItemIsEditable)
-            sheet_item.setData(Qt.UserRole, item.item_id) # 고유 ID 바인딩
-            self.setItem(idx, 0, sheet_item)
+            # 1. 구역/시트명 (수정 불가)
+            context_item = QTableWidgetItem(item.location_context)
+            context_item.setFlags(context_item.flags() & ~Qt.ItemIsEditable)
+            context_item.setData(Qt.UserRole, item.item_id) # 고유 ID 바인딩
+            self.setItem(idx, 0, context_item)
             
-            # 2. 셀 주소 (수정 불가)
-            cell_item = QTableWidgetItem(item.cell_address)
-            cell_item.setFlags(cell_item.flags() & ~Qt.ItemIsEditable)
-            self.setItem(idx, 1, cell_item)
+            # 2. 상세 위치 (수정 불가)
+            detail_item = QTableWidgetItem(item.location_detail)
+            detail_item.setFlags(detail_item.flags() & ~Qt.ItemIsEditable)
+            self.setItem(idx, 1, detail_item)
             
-            # 3. 원본 내용 (수정 불가)
+            # 3. 문맥 미리보기 (수정 불가)
+            preview_item = QTableWidgetItem(item.context_preview)
+            preview_item.setFlags(preview_item.flags() & ~Qt.ItemIsEditable)
+            self.setItem(idx, 2, preview_item)
+            
+            # 4. 원본 내용 (수정 불가)
             orig_item = QTableWidgetItem(item.original_value)
             orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
-            self.setItem(idx, 2, orig_item)
+            self.setItem(idx, 3, orig_item)
             
-            # 4. 대체될 텍스트 (사용자 직접 수정 가능)
+            # 5. 대체될 텍스트 (사용자 직접 수정 가능)
             rep_item = QTableWidgetItem(item.replacement)
             rep_item.setFlags(rep_item.flags() | Qt.ItemIsEditable)
-            self.setItem(idx, 3, rep_item)
+            self.setItem(idx, 4, rep_item)
             
-            # 5. 적용 여부 체크박스 (레이아웃 중앙 배치)
+            # 6. 적용 여부 체크박스 (레이아웃 중앙 배치)
             checkbox = QCheckBox()
             checkbox.setChecked(item.approved)
             checkbox.setProperty("item_id", item.item_id) # 고유 ID 바인딩
@@ -77,7 +83,7 @@ class PreviewTable(QTableWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             cell_widget.setLayout(layout)
             
-            self.setCellWidget(idx, 4, cell_widget)
+            self.setCellWidget(idx, 5, cell_widget)
             
         self.blockSignals(False)
  
@@ -86,12 +92,12 @@ class PreviewTable(QTableWidget):
         row = item.row()
         col = item.column()
         
-        if col == 3: # '변경 예정' 컬럼 수정 시
+        if col == 4: # '변경 예정' 컬럼 수정 시 (헤더 추가로 인덱스 3 -> 4)
             new_text = item.text()
             # 0번 컬럼 아이템에서 item_id를 읽어옴
-            sheet_item = self.item(row, 0)
-            if sheet_item:
-                item_id = sheet_item.data(Qt.UserRole)
+            context_item = self.item(row, 0)
+            if context_item:
+                item_id = context_item.data(Qt.UserRole)
                 self.item_edited.emit(item_id, "replacement", new_text)
                 logger.debug(f"테이블 수동 수정 반영 요청 - ID {item_id}: {new_text}")
  

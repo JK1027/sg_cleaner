@@ -3,6 +3,7 @@ import unittest
 import openpyxl
 from app.services.detector import AnonymizeDetector
 from app.services.excel_service import ExcelService
+from app.services.excel_processor import ExcelProcessor
 from app.models.detection_model import DetectionItem
 from app.utils.path_helper import get_project_root
 
@@ -72,7 +73,9 @@ class TestAnonymizeEngine(unittest.TestCase):
             school_names=["서울중학교"]
         )
         
-        results = detector.scan_workbook(self.test_excel_path)
+        processor = ExcelProcessor()
+        extracted = processor.extract_texts(self.test_excel_path)
+        results = detector.scan_text_items(extracted, self.test_excel_path)
         
         # 1. 탐지 개수 확인
         # 김민수: B2, C2 (2개)
@@ -97,7 +100,9 @@ class TestAnonymizeEngine(unittest.TestCase):
             student_names=["김민수"],
             school_names=["서울중학교"]
         )
-        results = detector.scan_workbook(self.test_excel_path)
+        processor = ExcelProcessor()
+        extracted = processor.extract_texts(self.test_excel_path)
+        results = detector.scan_text_items(extracted, self.test_excel_path)
         
         excel_service = ExcelService()
         output_dir = str(self.test_dir)
@@ -129,7 +134,9 @@ class TestAnonymizeEngine(unittest.TestCase):
         
         try:
             detector = AnonymizeDetector(student_names=["김민수"], school_names=[])
-            results = detector.scan_workbook(korean_file_path)
+            processor = ExcelProcessor()
+            extracted = processor.extract_texts(korean_file_path)
+            results = detector.scan_text_items(extracted, korean_file_path)
             
             # 김민수 2건 검출 확인
             self.assertEqual(len(results), 2)
@@ -153,8 +160,9 @@ class TestAnonymizeEngine(unittest.TestCase):
         excel_service = ExcelService()
         dummy_item = DetectionItem(
             file_path="non_existent.xlsx",
-            sheet_name="Sheet1",
-            cell_address="A1",
+            location_context="Sheet1",
+            location_detail="A1",
+            context_preview="김민수",
             original_value="김민수",
             match_value="김민수",
             replacement="학생1",
@@ -174,7 +182,9 @@ class TestAnonymizeEngine(unittest.TestCase):
             delete_keywords=["김민수", "서울중학교"],
             delete_replacement="***"
         )
-        results_star = detector_star.scan_workbook(self.test_excel_path)
+        processor = ExcelProcessor()
+        extracted_star = processor.extract_texts(self.test_excel_path)
+        results_star = detector_star.scan_text_items(extracted_star, self.test_excel_path)
         
         # 매핑 검증
         mapping_star = detector_star.get_full_mapping()
@@ -200,7 +210,9 @@ class TestAnonymizeEngine(unittest.TestCase):
             delete_keywords=["김민수", "서울중학교"],
             delete_replacement=""
         )
-        results_empty = detector_empty.scan_workbook(self.test_excel_path)
+        processor = ExcelProcessor()
+        extracted_empty = processor.extract_texts(self.test_excel_path)
+        results_empty = detector_empty.scan_text_items(extracted_empty, self.test_excel_path)
         
         # 매핑 검증
         mapping_empty = detector_empty.get_full_mapping()
@@ -247,7 +259,9 @@ class TestAnonymizeEngine(unittest.TestCase):
             student_names=["김민수", "이서연"],
             school_names=["서울중학교"]
         )
-        detector.scan_workbook(self.test_excel_path)
+        processor = ExcelProcessor()
+        extracted = processor.extract_texts(self.test_excel_path)
+        detector.scan_text_items(extracted, self.test_excel_path)
         mapping = detector.get_full_mapping()
         
         # 순서가 뒤집히지 않고 입력된 순서대로 인덱싱 부여
@@ -262,7 +276,9 @@ class TestAnonymizeEngine(unittest.TestCase):
             school_names=[]
         )
         
-        results = detector.scan_workbook(self.test_excel_path)
+        processor = ExcelProcessor()
+        extracted = processor.extract_texts(self.test_excel_path)
+        results = detector.scan_text_items(extracted, self.test_excel_path)
         
         # '민수'에 대한 개별 매칭이 중복 생성되었는지 검증 (김민수만 매칭되어야 함)
         match_values = [item.match_value for item in results]
@@ -292,6 +308,61 @@ class TestAnonymizeEngine(unittest.TestCase):
         
         self.assertTrue(len(error_called) > 0)
         self.assertIn("취소", error_called[0])
+
+    def test_hwpx_processor(self):
+        """HWPX 프로세서의 텍스트 추출 및 가명화 치환 기능 단위 테스트"""
+        import zipfile
+        hwpx_path = str(self.test_dir / "test_doc.hwpx")
+        
+        # 가상의 HWPX XML 본문 내용 생성
+        xml_content = """<?xml version="1.0" encoding="utf-8"?>
+        <hp:hwpml xmlns:hp="http://www.hancom.co.kr/hwpml/2011/paragraph">
+            <hp:p>
+                <hp:run>
+                    <hp:t>이순신 장군님은 한산중학교를 졸업했습니다.</hp:t>
+                </hp:run>
+            </hp:p>
+        </hp:hwpml>
+        """
+        
+        # 가상 HWPX zip 파일 생성
+        with zipfile.ZipFile(hwpx_path, "w") as z:
+            z.writestr("Contents/section0.xml", xml_content.encode("utf-8"))
+            z.writestr("mimetype", b"application/hwp+zip")
+            
+        try:
+            from app.services.hwpx_processor import HwpxProcessor
+            processor = HwpxProcessor()
+            
+            # 1. 텍스트 추출 검증
+            extracted = processor.extract_texts(hwpx_path)
+            self.assertEqual(len(extracted), 1)
+            self.assertEqual(extracted[0].text, "이순신 장군님은 한산중학교를 졸업했습니다.")
+            self.assertEqual(extracted[0].location_context, "Contents/section0.xml")
+            self.assertEqual(extracted[0].location_detail, "문단 1, 텍스트 1")
+            
+            # 2. 패턴 매칭 및 가명화 교체 테스트
+            detector = AnonymizeDetector(student_names=["이순신"], school_names=["한산중학교"])
+            results = detector.scan_text_items(extracted, hwpx_path)
+            self.assertEqual(len(results), 2)
+            
+            # Safe Save 치환 적용
+            excel_service = ExcelService() # Safe Save 공통 파이프라인
+            final_path = excel_service.apply_replacements_safe(hwpx_path, results, str(self.test_dir))
+            
+            # 치환 후 파일 파싱해서 확인
+            self.assertTrue(os.path.exists(final_path))
+            with zipfile.ZipFile(final_path, "r") as z_in:
+                new_xml = z_in.read("Contents/section0.xml").decode("utf-8")
+                self.assertIn("학생1 장군님은 학교A를 졸업했습니다.", new_xml)
+                self.assertNotIn("이순신", new_xml)
+                self.assertNotIn("한산중학교", new_xml)
+                
+            if os.path.exists(final_path):
+                os.remove(final_path)
+        finally:
+            if os.path.exists(hwpx_path):
+                os.remove(hwpx_path)
 
 if __name__ == "__main__":
     unittest.main()
