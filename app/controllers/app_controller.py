@@ -38,23 +38,23 @@ class AppController(QObject):
         UI가 state.selected_files를 직접 읽어 병합하는 대신
         이 메서드가 병합 로직을 담당하여 SoC 경계를 유지합니다.
         """
-        merged = list(dict.fromkeys(self.state.selected_files + new_file_paths))
+        merged = list(dict.fromkeys(self.state.selected_files_list + new_file_paths))
         self.set_selected_files(merged)
 
     def has_files(self) -> bool:
         """처리 대상 파일이 1개 이상 등록되어 있는지 반환합니다."""
-        return bool(self.state.selected_files)
+        return bool(self.state.selected_files_list)
 
     def can_run_detection(self) -> bool:
         """탐지 실행 가능 여부를 반환합니다. (파일 및 키워드 유효성 검사)
 
         UI의 유효성 검사 로직을 Controller로 위임하여 SoC 경계를 유지합니다.
         """
-        has_files = bool(self.state.selected_files)
+        has_files = bool(self.state.selected_files_list)
         has_keywords = bool(
-            self.state.student_names
-            or self.state.school_names
-            or self.state.delete_keywords
+            self.state.student_names_list
+            or self.state.school_names_list
+            or self.state.delete_keywords_list
         )
         return has_files and has_keywords
 
@@ -63,7 +63,7 @@ class AppController(QObject):
 
         UI의 유효성 검사 로직을 Controller로 위임하여 SoC 경계를 유지합니다.
         """
-        return bool(self.state.detection_results)
+        return bool(self.state.detection_results_list)
 
     def update_input_patterns(self, students: list[str], schools: list[str], delete_keywords: list[str]) -> None:
         """사용자가 화면에서 수정한 대상 이름/학교명/삭제 단어 패턴을 갱신합니다."""
@@ -74,7 +74,6 @@ class AppController(QObject):
         
         # 우선순위: 학생명 > 학교명 > 삭제어
         # 1. 학생명은 그대로 유지
-        self.state.student_names = raw_students
         student_set = set(raw_students)
         
         # 2. 학교명에서 학생명과 겹치는 부분 제거
@@ -84,7 +83,6 @@ class AppController(QObject):
                 logger.warning(f"키워드 충돌 감지: '{school}'은(는) 학생명 목록에 이미 존재하므로 학교명 목록에서 제외됩니다.")
             else:
                 filtered_schools.append(school)
-        self.state.school_names = filtered_schools
         school_set = set(filtered_schools)
         
         # 3. 삭제어에서 학생명 및 학교명과 겹치는 부분 제거
@@ -96,9 +94,10 @@ class AppController(QObject):
                 logger.warning(f"키워드 충돌 감지: '{word}'은(는) 학교명 목록에 이미 존재하므로 삭제 단어 목록에서 제외됩니다.")
             else:
                 filtered_deletes.append(word)
-        self.state.delete_keywords = filtered_deletes
         
-        logger.info(f"탐지 키워드 갱신 - 학생: {len(self.state.student_names)}명, 학교: {len(self.state.school_names)}개, 삭제: {len(self.state.delete_keywords)}개")
+        self.state.update_input_patterns(raw_students, filtered_schools, filtered_deletes)
+        
+        logger.info(f"탐지 키워드 갱신 - 학생: {len(self.state.student_names_list)}명, 학교: {len(self.state.school_names_list)}개, 삭제: {len(self.state.delete_keywords_list)}개")
         self.state_changed.emit()
 
     def update_save_options(self, save_mapping: bool, mapping_format: str) -> None:
@@ -158,10 +157,10 @@ class AppController(QObject):
 
         # Detection 스레드 생성
         self._detection_worker = DetectionWorker(
-            file_paths=self.state.selected_files,
-            student_names=self.state.student_names,
-            school_names=self.state.school_names,
-            delete_keywords=self.state.delete_keywords,
+            file_paths=self.state.selected_files_list,
+            student_names=self.state.student_names_list,
+            school_names=self.state.school_names_list,
+            delete_keywords=self.state.delete_keywords_list,
             delete_replacement=self.state.delete_replacement
         )
 
@@ -189,8 +188,8 @@ class AppController(QObject):
 
         # Anonymize 스레드 생성
         self._anonymize_worker = AnonymizeWorker(
-            selected_files=self.state.selected_files,
-            replacements=self.state.detection_results,
+            selected_files=self.state.selected_files_list,
+            replacements=self.state.detection_results_list,
             output_dir=output_dir,
             save_mapping=self.state.save_mapping,
             mapping_format=self.state.mapping_format

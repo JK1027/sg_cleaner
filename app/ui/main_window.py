@@ -21,6 +21,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("생기부 개인정보 익명화 도구")
         self.resize(1100, 800)
         
+        # 스레드 안전 트레이 알림 시그널 브로커 등록
+        from app.utils.notification_helper import NotificationHelper
+        NotificationHelper.initialize_broker(self)
+        
         self.init_ui()
         self.connect_signals()
         
@@ -238,7 +242,7 @@ class MainWindow(QMainWindow):
         if field_name == "approved":
             self.controller.update_detection_approval(item_id, bool(value))
             # 전체 테이블 재지정 없이 저장 버튼 활성 상태만 동적으로 실시간 업데이트
-            has_approved = any(item.approved for item in self.controller.state.detection_results)
+            has_approved = any(item.approved for item in self.controller.state.detection_results_list)
             self.btn_save.setEnabled(not self.controller.state.is_processing and has_approved)
         elif field_name == "replacement":
             self.controller.update_replacement_text(item_id, str(value))
@@ -253,7 +257,7 @@ class MainWindow(QMainWindow):
             return
             
         # ⚠️ 3차 보완: HWP 직접 치환 건너뜀 및 계속 진행 가이드 제공
-        has_hwp = any(f.lower().endswith(".hwp") for f in self.controller.state.selected_files)
+        has_hwp = any(f.lower().endswith(".hwp") for f in self.controller.state.selected_files_list)
         if has_hwp:
             reply = QMessageBox.question(
                 self,
@@ -279,12 +283,12 @@ class MainWindow(QMainWindow):
         
         # 파일 리스트 리프레시
         self.file_list.clear()
-        for f in state.selected_files:
+        for f in state.selected_files_list:
             self.file_list.addItem(os.path.basename(f))
             
         # 테이블 데이터 리프레시 (스크롤 위치 백업 후 복원)
         scroll_val = self.preview_table.verticalScrollBar().value()
-        self.preview_table.populate_data(state.detection_results)
+        self.preview_table.populate_data(state.detection_results_list)
         self.preview_table.verticalScrollBar().setValue(scroll_val)
         
         # ⚠️ UI 제어 상태 비활성화 제어 (처리 중일 때 입력 락 적용하여 오동작 예방)
@@ -292,7 +296,7 @@ class MainWindow(QMainWindow):
         self.btn_run_detection.setEnabled(not state.is_processing)
         
         # 저장 버튼 활성화 조건: 처리 중이 아니며, 최소 1개 이상 항목이 승인됨
-        has_approved = any(item.approved for item in state.detection_results)
+        has_approved = any(item.approved for item in state.detection_results_list)
         self.btn_save.setEnabled(not state.is_processing and has_approved)
         
         # 진행 상태에 따라 취소 버튼 동적 제어
