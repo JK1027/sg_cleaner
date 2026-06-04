@@ -6,6 +6,12 @@ from app.services.base_processor import BaseProcessor, ExtractedTextItem
 from app.models.detection_model import DetectionItem
 from app.utils.logger import logger
 
+# 한글 HWPX 주요 XML 네임스페이스 접두사 강제 보존 등록
+ET.register_namespace("hp", "http://www.hancom.co.kr/hwpml/2011/paragraph")
+ET.register_namespace("hs", "http://www.hancom.co.kr/hwpml/2011/sentencestructure")
+ET.register_namespace("hc", "http://www.hancom.co.kr/hwpml/2011/container")
+ET.register_namespace("ha", "http://www.hancom.co.kr/hwpml/2011/app")
+
 class HwpxProcessor(BaseProcessor):
     """
     HWPX (한글 XML 기반 오픈 규격) 문서의 데이터 추출 및 안전 치환을 처리하는 구체 프로세서 클래스.

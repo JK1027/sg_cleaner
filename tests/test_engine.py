@@ -351,12 +351,13 @@ class TestAnonymizeEngine(unittest.TestCase):
             final_path = excel_service.apply_replacements_safe(hwpx_path, results, str(self.test_dir))
             
             # 치환 후 파일 파싱해서 확인
+            # 치환 후 파일 역파싱 무결성 검증 (3차 보완: XML 접두사명에 의존하지 않는 파싱 정합성 검증)
             self.assertTrue(os.path.exists(final_path))
-            with zipfile.ZipFile(final_path, "r") as z_in:
-                new_xml = z_in.read("Contents/section0.xml").decode("utf-8")
-                self.assertIn("학생1 장군님은 학교A를 졸업했습니다.", new_xml)
-                self.assertNotIn("이순신", new_xml)
-                self.assertNotIn("한산중학교", new_xml)
+            new_extracted = processor.extract_texts(final_path)
+            self.assertEqual(len(new_extracted), 1)
+            self.assertEqual(new_extracted[0].text, "학생1 장군님은 학교A를 졸업했습니다.")
+            self.assertEqual(new_extracted[0].location_context, "Contents/section0.xml")
+            self.assertEqual(new_extracted[0].location_detail, "문단 1, 텍스트 1")
                 
             if os.path.exists(final_path):
                 os.remove(final_path)

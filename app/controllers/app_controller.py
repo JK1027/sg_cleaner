@@ -24,10 +24,10 @@ class AppController(QObject):
         logger.info("AppController가 초기화 및 실제 연동 모드로 전환되었습니다.")
 
     def set_selected_files(self, file_paths: list[str]) -> None:
-        """스캔할 대상 Excel 파일 목록을 갱신합니다."""
-        self.state.selected_files = file_paths
+        """스캔할 대상 파일 목록을 갱신합니다."""
+        self.state.update_selected_files(file_paths)
         # 파일이 변경되면 기존 탐지 결과도 안전하게 초기화합니다.
-        self.state.detection_results = []
+        self.state.clear_detection_results()
         self._item_map = {}
         logger.info(f"선택 파일 리스트 업데이트: {len(file_paths)}개 등록됨.")
         self.state_changed.emit()
@@ -114,9 +114,7 @@ class AppController(QObject):
         ※ 테이블은 사용자가 체크박스를 조작한 시점에 이미 시각적으로 올바른 상태이므로
            state_changed 시그널을 방출하지 않습니다. (전체 테이블 재렌더링 방지)
         """
-        item = self._item_map.get(item_id)
-        if item:
-            item.approved = approved
+        if self.state.update_detection_approval(item_id, approved):
             logger.debug(f"항목 {item_id} 승인 상태 변경 -> {approved}")
 
     def update_replacement_text(self, item_id: str, new_text: str) -> None:
@@ -125,11 +123,8 @@ class AppController(QObject):
         ※ 테이블 셀은 사용자가 직접 편집한 시점에 이미 시각적으로 올바른 상태이므로
            state_changed 시그널을 방출하지 않습니다. (전체 테이블 재렌더링 방지)
         """
-        item = self._item_map.get(item_id)
-        if item:
-            old_text = item.replacement
-            item.replacement = new_text
-            logger.info(f"항목 {item_id} 치환명 수정: {old_text} -> {new_text}")
+        if self.state.update_replacement_text(item_id, new_text):
+            logger.info(f"항목 {item_id} 치환명 수정: {new_text}")
 
     def update_delete_replacement(self, replacement: str) -> None:
         """삭제 대체 텍스트를 업데이트합니다."""
@@ -143,7 +138,7 @@ class AppController(QObject):
             return
             
         logger.info("사용자에 의한 백그라운드 작업 취소 요청 접수.")
-        self.state.status_message = "취소 중... 잠시만 기다려주세요."
+        self.state.set_processing_state(True, "취소 중... 잠시만 기다려주세요.", self.state.progress_percentage)
         self.state_changed.emit()
         
         if self._detection_worker and self._detection_worker.isRunning():
@@ -158,9 +153,7 @@ class AppController(QObject):
             logger.warning("현재 이미 처리 중인 백그라운드 작업이 존재합니다.")
             return
 
-        self.state.is_processing = True
-        self.state.progress_percentage = 0
-        self.state.status_message = "작업 시작 중..."
+        self.state.set_processing_state(True, "작업 시작 중...", 0)
         self.state_changed.emit()
 
         # Detection 스레드 생성
@@ -191,9 +184,7 @@ class AppController(QObject):
             logger.warning("현재 처리 중인 작업이 있어 저장을 실행할 수 없습니다.")
             return
 
-        self.state.is_processing = True
-        self.state.progress_percentage = 0
-        self.state.status_message = "익명화 파일 생성 중..."
+        self.state.set_processing_state(True, "익명화 파일 생성 중...", 0)
         self.state_changed.emit()
 
         # Anonymize 스레드 생성
@@ -219,18 +210,16 @@ class AppController(QObject):
     @Slot(int, str)
     def _on_worker_progress(self, percentage: int, message: str):
         """백그라운드 스레드의 진행 정보를 UI로 릴레이 및 컨트롤러 상태 갱신"""
-        self.state.progress_percentage = percentage
-        self.state.status_message = message
+        self.state.set_processing_state(self.state.is_processing, message, percentage)
         self.progress_changed.emit(percentage, message)
 
     @Slot(list)
     def _on_detection_finished(self, results: list):
         """탐지 완료 슬롯"""
-        self.state.detection_results = results
+        self.state.clear_detection_results()
+        self.state.extend_detection_results(results)
         self._item_map = {item.item_id: item for item in results} # O(1) 딕셔너리 매핑 빌드
-        self.state.is_processing = False
-        self.state.progress_percentage = 100
-        self.state.status_message = f"탐지 완료 (검출 건수: {len(results)}건)"
+        self.state.set_processing_state(False, f"탐지 완료 (검출 건수: {len(results)}건)", 100)
         
         self.progress_changed.emit(100, self.state.status_message)
         self.state_changed.emit()
@@ -239,9 +228,7 @@ class AppController(QObject):
     @Slot(str)
     def _on_detection_error(self, err_msg: str):
         """탐색 에러 슬롯"""
-        self.state.is_processing = False
-        self.state.progress_percentage = 0
-        self.state.status_message = "오류 발생으로 스캔 중단"
+        self.state.set_processing_state(False, "오류 발생으로 스캔 중단", 0)
         
         self.state_changed.emit()
         self.process_finished.emit(False, err_msg)
@@ -250,9 +237,7 @@ class AppController(QObject):
     @Slot(bool, str)
     def _on_anonymize_finished(self, success: bool, msg: str):
         """익명화 변환 완료 슬롯"""
-        self.state.is_processing = False
-        self.state.progress_percentage = 100 if success else 0
-        self.state.status_message = "작업 완료" if success else "에러로 처리 실패"
+        self.state.set_processing_state(False, "작업 완료" if success else "에러로 처리 실패", 100 if success else 0)
         
         self.state_changed.emit()
         self.process_finished.emit(success, msg)

@@ -15,20 +15,38 @@ class NotificationHelper:
         if cls._tray_icon is None:
             if QApplication.instance():
                 cls._tray_icon = QSystemTrayIcon(QApplication.instance())
-                # 기본 정보 수준의 빈 아이콘 지정 (시스템 기본값 사용)
-                cls._tray_icon.setIcon(QIcon())
+                
+                # 어플리케이션 기본 윈도우 아이콘 로드 시도
+                icon = QApplication.windowIcon()
+                if icon.isNull():
+                    # 시스템 정보 기본 아이콘으로 Fallback
+                    icon = QIcon.fromTheme("dialog-information")
+                
+                cls._tray_icon.setIcon(icon)
                 cls._tray_icon.show()
         return cls._tray_icon
 
     @classmethod
     def show_notification(cls, title: str, message: str, is_error: bool = False):
         """
-        백그라운드 스레드에서 안전하게 호출 가능하도록 메인 이벤트 루프에 알림 송출 작업을 예약합니다.
+        시스템 트레이의 가용 여부를 체크하고, 불가한 환경인 경우 로그를 통해 정합성을 보장합니다.
+        메인 GUI 스레드 이벤트 루프를 경유해 스레드 안전하게 호출되도록 통제합니다.
         """
         icon_type = QSystemTrayIcon.MessageIcon.Critical if is_error else QSystemTrayIcon.MessageIcon.Information
         
         def _execute_notification():
             try:
+                # ⚠️ 3차 보완: 시스템 트레이 활성화/가용성 선제 검증
+                if not QSystemTrayIcon.isSystemTrayAvailable():
+                    logger.warning(f"시스템 트레이 미지원 또는 비활성 환경. 상태 알림 대체 출력: [{title}] {message}")
+                    # UI 인스턴스가 존재할 경우 상태바 릴레이 피드백 우회
+                    app = QApplication.instance()
+                    if app:
+                        for widget in app.topLevelWidgets():
+                            if hasattr(widget, "statusBar"):
+                                widget.statusBar().showMessage(f"[{title}] {message}", 5000)
+                    return
+
                 tray = cls.get_tray_icon()
                 if tray and QSystemTrayIcon.supportsMessages():
                     tray.showMessage(title, message, icon_type, 5000)

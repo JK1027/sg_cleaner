@@ -131,6 +131,12 @@ class AnonymizeWorker(QThread):
                     logger.info("백그라운드 익명화 작업이 사용자에 의해 취소되었습니다.")
                     self.finished.emit(False, "사용자가 작업을 취소했습니다.")
                     return
+                
+                # ⚠️ .hwp 확장자인 경우 Safe Save 익명화 처리 스킵 (선제 경고 승인 하에 실행)
+                if file_path.lower().endswith(".hwp"):
+                    logger.info(f"한글(.hwp) 치환 건너뜀: {file_path}")
+                    continue
+
                 percentage = int((index / total_files) * 90) # 매핑 전까지 90% 반영
                 file_name = file_path.split("/")[-1].split("\\")[-1]
                 self.progress_changed.emit(percentage, f"{file_name} 익명화 적용 중...")

@@ -28,6 +28,10 @@ class HwpProcessor(BaseProcessor):
             # HWP OLE 연결 (백그라운드 실행)
             hwp = win32com.client.Dispatch("HWPFrame.HwpObject")
             
+            # 백그라운드 구동 시 창 깜빡임 및 포커스 뺏김 현상 차단
+            if hwp.XHwpWindows.Count > 0:
+                hwp.XHwpWindows.Item(0).Visible = False
+            
             # 파일 오픈 (대화상자 생략 및 강제 열기)
             # forceopen:true는 다른 프로세스가 사용 중이거나 복구 메시지를 무시하고 열기 시도
             opened = hwp.Open(file_path, "HWP", "forceopen:true")

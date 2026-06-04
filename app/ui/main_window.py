@@ -252,6 +252,21 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "저장 불가", "탐지된 결과가 없습니다. 먼저 탐지를 실행해주세요.")
             return
             
+        # ⚠️ 3차 보완: HWP 직접 치환 건너뜀 및 계속 진행 가이드 제공
+        has_hwp = any(f.lower().endswith(".hwp") for f in self.controller.state.selected_files)
+        if has_hwp:
+            reply = QMessageBox.question(
+                self,
+                "한글(.hwp) 파일 저장 제외 안내",
+                "선택된 파일 중 한글(.hwp) 파일이 포함되어 있습니다.\n"
+                "현재 한글(.hwp) 파일은 스캔만 지원하며, 안전한 치환 저장은 보류 상태입니다.\n\n"
+                "한글(.hwp) 파일 저장은 건너뛰고 엑셀(.xlsx) 및 HWPX(.hwpx) 파일만 익명화하여 저장하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+
         output_dir = QFileDialog.getExistingDirectory(self, "저장할 대상 폴더 선택")
         if output_dir:
             self.controller.execute_anonymization(output_dir)
