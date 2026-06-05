@@ -50,6 +50,18 @@ class AppState:
     def detection_results_list(self) -> List[DetectionItem]:
         return list(self._detection_results)
     
+    # 프리셋 관련 비공개 필드 및 프로퍼티
+    _current_preset_id: str = ""
+    _preset_dict: dict = field(default_factory=dict)
+
+    @property
+    def current_preset_id(self) -> str:
+        return self._current_preset_id
+
+    @property
+    def preset_dict(self) -> dict:
+        return dict(self._preset_dict)
+    
     # 저장 설정
     save_mapping: bool = False
     mapping_format: str = "CSV"
@@ -62,6 +74,14 @@ class AppState:
     delete_replacement: str = ""
 
     # --- 컬렉션 및 상태 캡슐화 제어 메서드 ---
+
+    def update_presets(self, preset_dict: dict) -> None:
+        """스캔된 로컬 프리셋 목록을 업데이트합니다."""
+        self._preset_dict = dict(preset_dict)
+
+    def set_current_preset_id(self, file_id: str) -> None:
+        """현재 선택된 프리셋 ID를 설정합니다."""
+        self._current_preset_id = file_id
 
     def update_selected_files(self, file_paths: list[str]) -> None:
         """선택된 파일 목록을 교체합니다."""

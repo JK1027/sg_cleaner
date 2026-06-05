@@ -3,7 +3,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QListWidget, QPlainTextEdit, QCheckBox,
     QComboBox, QFileDialog, QProgressBar, QMessageBox, QGroupBox, QSplitter,
-    QLineEdit
+    QLineEdit, QInputDialog
 )
 from PySide6.QtCore import Qt, Slot
 from app.controllers.app_controller import AppController
@@ -27,6 +27,12 @@ class MainWindow(QMainWindow):
         
         self.init_ui()
         self.connect_signals()
+        
+        # 임시 저장본(draft)이 있다면 복원 시도
+        self.controller.load_draft_to_inputs()
+        
+        # 프리셋 리스트 동기화
+        self.update_preset_combo_list()
         
         # 최초 1회 화면 그리기
         self.on_state_changed()
@@ -68,20 +74,43 @@ class MainWindow(QMainWindow):
         pattern_layout.setContentsMargins(12, 18, 12, 12)
         pattern_layout.setSpacing(8)
         
-        pattern_layout.addWidget(QLabel("학생 이름 목록 (가명화):"), 0, 0)
+        # 프리셋 관리 컨트롤 레이아웃 (최상단 배치)
+        preset_bar_layout = QHBoxLayout()
+        preset_bar_layout.setSpacing(6)
+        
+        preset_bar_layout.addWidget(QLabel("학생명 세트 (프리셋):"))
+        self.combo_presets = QComboBox()
+        self.combo_presets.setMinimumWidth(180)
+        preset_bar_layout.addWidget(self.combo_presets)
+        
+        self.btn_new_preset = QPushButton("새 프리셋")
+        self.btn_save_preset = QPushButton("저장")
+        self.btn_clone_preset = QPushButton("복제")
+        self.btn_delete_preset = QPushButton("삭제")
+        
+        preset_bar_layout.addWidget(self.btn_new_preset)
+        preset_bar_layout.addWidget(self.btn_save_preset)
+        preset_bar_layout.addWidget(self.btn_clone_preset)
+        preset_bar_layout.addWidget(self.btn_delete_preset)
+        preset_bar_layout.addStretch()
+        
+        pattern_layout.addLayout(preset_bar_layout, 0, 0, 1, 3)
+        
+        # 입력 위젯 및 라벨 (한 줄씩 하향 배치)
+        pattern_layout.addWidget(QLabel("학생 이름 목록 (가명화):"), 1, 0)
         self.txt_students = QPlainTextEdit()
         self.txt_students.setPlaceholderText("예: 김민수, 이서연, 박철수")
-        pattern_layout.addWidget(self.txt_students, 1, 0)
+        pattern_layout.addWidget(self.txt_students, 2, 0)
         
-        pattern_layout.addWidget(QLabel("학교명 목록 (가명화):"), 0, 1)
+        pattern_layout.addWidget(QLabel("학교명 목록 (가명화):"), 1, 1)
         self.txt_schools = QPlainTextEdit()
         self.txt_schools.setPlaceholderText("예: 서울중학교, 한국중학교")
-        pattern_layout.addWidget(self.txt_schools, 1, 1)
-
-        pattern_layout.addWidget(QLabel("삭제할 단어 목록 (제거):"), 0, 2)
+        pattern_layout.addWidget(self.txt_schools, 2, 1)
+ 
+        pattern_layout.addWidget(QLabel("삭제할 단어 목록 (제거):"), 1, 2)
         self.txt_delete_keywords = QPlainTextEdit()
         self.txt_delete_keywords.setPlaceholderText("예: 삭제할단어1, 삭제할단어2")
-        pattern_layout.addWidget(self.txt_delete_keywords, 1, 2)
+        pattern_layout.addWidget(self.txt_delete_keywords, 2, 2)
         
         # 삭제 대체 텍스트 입력부
         delete_rep_layout = QHBoxLayout()
@@ -90,7 +119,7 @@ class MainWindow(QMainWindow):
         self.txt_delete_replacement.setPlaceholderText("기본값: 공백")
         self.txt_delete_replacement.setText("")
         delete_rep_layout.addWidget(self.txt_delete_replacement)
-        pattern_layout.addLayout(delete_rep_layout, 2, 2)
+        pattern_layout.addLayout(delete_rep_layout, 3, 2)
         
         # 옵션 영역
         opt_layout = QHBoxLayout()
@@ -104,12 +133,12 @@ class MainWindow(QMainWindow):
         opt_layout.addWidget(self.chk_save_mapping)
         opt_layout.addWidget(self.combo_mapping_fmt)
         opt_layout.addStretch()
-        pattern_layout.addLayout(opt_layout, 3, 0, 1, 3)
+        pattern_layout.addLayout(opt_layout, 4, 0, 1, 3)
         
         # 탐지 실행 버튼 (QSS 커스텀 스타일 연동을 위한 objectName 설정)
         self.btn_run_detection = QPushButton("개인정보 자동 탐지 실행")
         self.btn_run_detection.setObjectName("btn_run_detection")
-        pattern_layout.addWidget(self.btn_run_detection, 4, 0, 1, 3)
+        pattern_layout.addWidget(self.btn_run_detection, 5, 0, 1, 3)
         
         top_splitter.addWidget(pattern_group)
         main_layout.addWidget(top_splitter, stretch=1)
@@ -160,6 +189,22 @@ class MainWindow(QMainWindow):
         
         # 삭제 대체 설정 변경 시그널 연결
         self.txt_delete_replacement.textChanged.connect(self.on_delete_replacement_changed)
+        
+        # 프리셋 관련 UI 시그널 연결
+        self.combo_presets.currentIndexChanged.connect(self.on_preset_selection_changed)
+        self.btn_new_preset.clicked.connect(self.on_new_preset_clicked)
+        self.btn_save_preset.clicked.connect(self.on_save_preset_clicked)
+        self.btn_clone_preset.clicked.connect(self.on_clone_preset_clicked)
+        self.btn_delete_preset.clicked.connect(self.on_delete_preset_clicked)
+        
+        # 임시 자동 저장 (Draft) 연동
+        self.txt_students.textChanged.connect(self.trigger_draft_save)
+        self.txt_schools.textChanged.connect(self.trigger_draft_save)
+        self.txt_delete_keywords.textChanged.connect(self.trigger_draft_save)
+        self.txt_delete_replacement.textChanged.connect(self.trigger_draft_save)
+        
+        # 컨트롤러 프리셋 로드 시그널 연결
+        self.controller.preset_loaded.connect(self.on_preset_loaded_from_controller)
         
         # 테이블 내 수동 편집 중계
         self.preview_table.item_edited.connect(self.on_table_item_edited)
@@ -310,6 +355,14 @@ class MainWindow(QMainWindow):
         self.chk_save_mapping.setEnabled(not state.is_processing)
         self.combo_mapping_fmt.setEnabled(not state.is_processing and self.chk_save_mapping.isChecked())
         
+        # 프리셋 위젯 동기화 및 제어
+        self.update_preset_combo_list()
+        self.combo_presets.setEnabled(not state.is_processing)
+        self.btn_new_preset.setEnabled(not state.is_processing)
+        self.btn_save_preset.setEnabled(not state.is_processing and bool(state.current_preset_id))
+        self.btn_clone_preset.setEnabled(not state.is_processing and bool(state.current_preset_id))
+        self.btn_delete_preset.setEnabled(not state.is_processing and bool(state.current_preset_id))
+
         # 신호 차단 후 상태 동기화
         self.txt_delete_replacement.blockSignals(True)
         self.txt_delete_replacement.setText(state.delete_replacement)
@@ -332,6 +385,205 @@ class MainWindow(QMainWindow):
         else:
             QMessageBox.critical(self, "오류", msg)
             
+    # --- 프리셋 관리 UI 이벤트 핸들러 및 슬롯 ---
+    
+    def update_preset_combo_list(self):
+        """AppState의 프리셋 목록 정보를 기반으로 QComboBox 아이템을 실시간 동기화합니다."""
+        preset_dict = self.controller.state.preset_dict
+        current_id = self.controller.state.current_preset_id
+        
+        # UI 드롭다운 구성 요소를 사전 체크하여 변경이 필요할 때만 갱신 (무한루프/플리커링 방지)
+        combo_items = {}
+        for i in range(1, self.combo_presets.count()):
+            combo_items[self.combo_presets.itemData(i)] = self.combo_presets.itemText(i)
+            
+        current_dict_items = {k: v.get("name", "") for k, v in preset_dict.items()}
+        
+        if combo_items != current_dict_items:
+            self.combo_presets.blockSignals(True)
+            self.combo_presets.clear()
+            self.combo_presets.addItem("— 프리셋 선택 안 함 —", "")
+            for file_id, info in preset_dict.items():
+                self.combo_presets.addItem(info.get("name", "이름 없음"), file_id)
+            self.combo_presets.blockSignals(False)
+            
+        # 선택 상태 설정
+        self.combo_presets.blockSignals(True)
+        active_index = 0
+        for i in range(self.combo_presets.count()):
+            if self.combo_presets.itemData(i) == current_id:
+                active_index = i
+                break
+        self.combo_presets.setCurrentIndex(active_index)
+        self.combo_presets.blockSignals(False)
+
+    def on_preset_selection_changed(self, index: int):
+        """콤보박스 선택 변경 시 호출되며, 덮어쓰기 여부를 확인한 후 프리셋을 로드합니다."""
+        file_id = self.combo_presets.itemData(index)
+        
+        # 동일한 프리셋 선택 시 무시
+        if file_id == self.controller.state.current_preset_id:
+            return
+            
+        # 현재 입력 창에 데이터가 있는 상태에서 프리셋 변경을 하려고 할 때 덮어쓰기 경고 출력
+        has_input = (
+            self.txt_students.toPlainText().strip()
+            or self.txt_schools.toPlainText().strip()
+            or self.txt_delete_keywords.toPlainText().strip()
+            or self.txt_delete_replacement.text().strip()
+        )
+        
+        if has_input:
+            reply = QMessageBox.question(
+                self,
+                "프리셋 변경 확인",
+                "프리셋을 변경하면 현재 작성 중인 입력 내용이 유실됩니다. 계속하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                # 선택을 다시 이전 활성화된 프리셋으로 복원
+                self.update_preset_combo_list()
+                return
+                
+        self.controller.load_preset_to_inputs(file_id)
+
+    def on_new_preset_clicked(self):
+        """새 프리셋을 이름 중복 확인 후 생성합니다."""
+        name, ok = QInputDialog.getText(self, "새 프리셋 생성", "새 프리셋 이름을 입력해 주세요:")
+        if not ok or not name.strip():
+            return
+            
+        display_name = name.strip()
+        
+        # 이름 중복 확인
+        preset_dict = self.controller.state.preset_dict
+        for file_id, info in preset_dict.items():
+            if info.get("name") == display_name:
+                QMessageBox.warning(self, "이름 중복", "이미 동일한 이름의 프리셋이 존재합니다.")
+                return
+                
+        # 현재 화면의 입력값을 페이로드로 프리셋 생성
+        payload = self._get_current_inputs_payload()
+        new_id = self.controller.create_new_preset(display_name, payload)
+        if new_id:
+            self.statusBar().showMessage(f"새 프리셋 '{display_name}'이(가) 성공적으로 생성되었습니다.")
+
+    def on_save_preset_clicked(self):
+        """선택된 프리셋에 현재 입력값을 저장(덮어쓰기)합니다."""
+        current_id = self.controller.state.current_preset_id
+        if not current_id:
+            return
+            
+        preset_dict = self.controller.state.preset_dict
+        display_name = preset_dict.get(current_id, {}).get("name", "프리셋")
+        
+        payload = self._get_current_inputs_payload()
+        self.controller.save_current_preset(current_id, display_name, payload)
+        self.statusBar().showMessage(f"프리셋 '{display_name}'에 현재 변경 사항을 저장했습니다.")
+
+    def on_clone_preset_clicked(self):
+        """현재 선택된 프리셋을 기반으로 다른 이름을 가진 프리셋을 복제 생성합니다."""
+        current_id = self.controller.state.current_preset_id
+        if not current_id:
+            return
+            
+        preset_dict = self.controller.state.preset_dict
+        current_name = preset_dict.get(current_id, {}).get("name", "프리셋")
+        default_suggest = f"{current_name} (복사본)"
+        
+        name, ok = QInputDialog.getText(
+            self, 
+            "프리셋 복제", 
+            "복제할 새 프리셋 이름을 입력해 주세요:", 
+            QLineEdit.Normal, 
+            default_suggest
+        )
+        if not ok or not name.strip():
+            return
+            
+        display_name = name.strip()
+        
+        # 이름 중복 확인
+        for file_id, info in preset_dict.items():
+            if info.get("name") == display_name:
+                QMessageBox.warning(self, "이름 중복", "이미 동일한 이름의 프리셋이 존재합니다.")
+                return
+                
+        payload = self._get_current_inputs_payload()
+        new_id = self.controller.create_new_preset(display_name, payload)
+        if new_id:
+            self.statusBar().showMessage(f"프리셋 '{current_name}'을(를) '{display_name}'(으)로 복제 생성했습니다.")
+
+    def on_delete_preset_clicked(self):
+        """현재 선택된 프리셋을 삭제 승인 팝업 확인 후 물리 삭제합니다."""
+        current_id = self.controller.state.current_preset_id
+        if not current_id:
+            return
+            
+        preset_dict = self.controller.state.preset_dict
+        display_name = preset_dict.get(current_id, {}).get("name", "프리셋")
+        
+        reply = QMessageBox.question(
+            self,
+            "프리셋 삭제 확인",
+            f"프리셋 '{display_name}'을(를) 정말 삭제하시겠습니까?\n삭제 후에는 데이터를 복구할 수 없습니다.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            self.controller.delete_preset(current_id)
+            self.statusBar().showMessage(f"프리셋 '{display_name}'이(가) 삭제되었습니다.")
+
+    @Slot(list, list, list, str)
+    def on_preset_loaded_from_controller(self, students: list, schools: list, deletes: list, replacement: str):
+        """컨트롤러에서 프리셋 로드 완료 신호가 왔을 때 UI 입력창 값을 바인딩합니다."""
+        self.txt_students.blockSignals(True)
+        self.txt_schools.blockSignals(True)
+        self.txt_delete_keywords.blockSignals(True)
+        self.txt_delete_replacement.blockSignals(True)
+        
+        # 구분자는 , 기호로 조인하여 가독성을 높입니다.
+        self.txt_students.setPlainText(", ".join(students))
+        self.txt_schools.setPlainText(", ".join(schools))
+        self.txt_delete_keywords.setPlainText(", ".join(deletes))
+        self.txt_delete_replacement.setText(replacement)
+        
+        self.txt_students.blockSignals(False)
+        self.txt_schools.blockSignals(False)
+        self.txt_delete_keywords.blockSignals(False)
+        self.txt_delete_replacement.blockSignals(False)
+        
+        # 빈 프리셋 여부에 따른 사용자 피드백 제공
+        if not students and not schools and not deletes:
+            self.statusBar().showMessage("안내: 이 프리셋에는 저장된 데이터가 없습니다.")
+        else:
+            self.statusBar().showMessage("프리셋 로드 완료.")
+
+    def trigger_draft_save(self):
+        """현재 입력창 변경 내용을 draft.json 파일로 임시 자동 저장합니다."""
+        # 처리 중인 연산 중에는 수동/임시 저장 루프 방지
+        if self.controller.state.is_processing:
+            return
+            
+        payload = self._get_current_inputs_payload()
+        self.controller.save_draft(payload)
+
+    def _get_current_inputs_payload(self) -> dict:
+        """입력 필드 내용을 구조화된 딕셔너리로 추출합니다."""
+        students = self.txt_students.toPlainText().replace("\n", ",").split(",")
+        schools = self.txt_schools.toPlainText().replace("\n", ",").split(",")
+        deletes = self.txt_delete_keywords.toPlainText().replace("\n", ",").split(",")
+        replacement = self.txt_delete_replacement.text()
+        
+        return {
+            "students": [s.strip() for s in students if s.strip()],
+            "schools": [s.strip() for s in schools if s.strip()],
+            "delete_keywords": [d.strip() for d in deletes if d.strip()],
+            "delete_replacement": replacement
+        }
+
     def closeEvent(self, event):
         """창을 닫을 때 백그라운드 스레드가 실행 중이면 안전하게 취소 요청을 보냅니다."""
         if self.controller.state.is_processing:

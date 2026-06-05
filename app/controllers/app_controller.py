@@ -1,6 +1,9 @@
+
+
 from PySide6.QtCore import QObject, Signal, Slot
 from app.models.app_state import AppState
 from app.services.worker import DetectionWorker, AnonymizeWorker
+from app.services.preset_manager import PresetManager
 from app.utils.logger import logger
 
 class AppController(QObject):
@@ -14,6 +17,8 @@ class AppController(QObject):
     progress_changed = Signal(int, str)
     # 작업 마무리 리포트 시그널 (성공여부, 안내 메시지)
     process_finished = Signal(bool, str)
+    # 프리셋 데이터 로딩 알림 시그널 (UI의 입력창 갱신용: students, schools, delete_keywords, delete_replacement)
+    preset_loaded = Signal(list, list, list, str)
 
     def __init__(self, state: AppState):
         super().__init__()
@@ -22,6 +27,8 @@ class AppController(QObject):
         self._anonymize_worker = None
         self._item_map = {} # O(1) 조회를 위한 UUID 매핑 딕셔너리
         logger.info("AppController가 초기화 및 실제 연동 모드로 전환되었습니다.")
+        # 초기화 시 프리셋 리스트 스캔
+        self.refresh_presets()
 
     def set_selected_files(self, file_paths: list[str]) -> None:
         """스캔할 대상 파일 목록을 갱신합니다."""
@@ -241,3 +248,99 @@ class AppController(QObject):
         self.state_changed.emit()
         self.process_finished.emit(success, msg)
         logger.info(f"비동기 익명화 완료 슬롯 수신: 성공여부={success}")
+
+    # --- 프리셋 관리 비즈니스 로직 ---
+
+    def refresh_presets(self) -> None:
+        """로컬 AppData에 저장된 프리셋 리스트를 스캔하여 AppState에 동기화합니다."""
+        presets = PresetManager.get_presets_info()
+        self.state.update_presets(presets)
+        self.state_changed.emit()
+
+    def load_preset_to_inputs(self, file_id: str) -> None:
+        """지정한 file_id의 프리셋을 로드하고 state를 변경하며 UI에 로딩 완료를 전파합니다."""
+        if not file_id:
+            self.state.set_current_preset_id("")
+            # 빈 값 상태로 UI에 공백 로드
+            self.preset_loaded.emit([], [], [], "")
+            self.state_changed.emit()
+            return
+
+        try:
+            preset_data = PresetManager.load_preset(file_id)
+            students = preset_data.get("students", [])
+            schools = preset_data.get("schools", [])
+            deletes = preset_data.get("delete_keywords", [])
+            replacement = preset_data.get("delete_replacement", "")
+
+            # 상태 업데이트
+            self.state.set_current_preset_id(file_id)
+            self.state.update_input_patterns(students, schools, deletes)
+            self.state.update_delete_replacement(replacement)
+
+            # UI 갱신 시그널 발행 (텍스트박스를 즉시 채우기 위해)
+            self.preset_loaded.emit(students, schools, deletes, replacement)
+            
+            logger.info(f"프리셋 로드 성공: ID={file_id}, Name={preset_data.get('name')}")
+            self.state_changed.emit()
+        except Exception as e:
+            logger.error(f"프리셋 로딩 실패: {str(e)}")
+
+    def save_current_preset(self, file_id: str, display_name: str, payload: dict) -> None:
+        """기존 선택된 프리셋의 내용을 덮어쓰기 저장합니다."""
+        try:
+            PresetManager.save_preset(file_id, display_name, payload)
+            self.refresh_presets()
+            logger.info(f"프리셋 업데이트 및 리프레시 성공: {display_name}")
+        except Exception as e:
+            logger.error(f"프리셋 저장 실패: {str(e)}")
+
+    def create_new_preset(self, display_name: str, payload: dict) -> str:
+        """신규 프리셋을 생성하고, 프리셋 목록을 리프레시한 뒤 생성된 file_id를 반환합니다."""
+        try:
+            file_id = PresetManager.create_preset(display_name, payload)
+            self.refresh_presets()
+            self.state.set_current_preset_id(file_id)
+            self.state_changed.emit()
+            return file_id
+        except Exception as e:
+            logger.error(f"신규 프리셋 생성 실패: {str(e)}")
+            return ""
+
+    def delete_preset(self, file_id: str) -> None:
+        """지정한 프리셋을 삭제하고 선택을 초기화합니다."""
+        try:
+            PresetManager.delete_preset(file_id)
+            if self.state.current_preset_id == file_id:
+                self.state.set_current_preset_id("")
+            self.refresh_presets()
+        except Exception as e:
+            logger.error(f"프리셋 삭제 실패: {str(e)}")
+
+    def save_draft(self, payload: dict) -> None:
+        """현재 상태를 draft.json에 임시 자동 저장합니다."""
+        PresetManager.save_draft(payload)
+
+    def load_draft_to_inputs(self) -> bool:
+        """임시 저장된 드래프트가 있을 경우 복원하여 입력창에 채우고 True를 반환합니다."""
+        try:
+            draft_data = PresetManager.load_draft()
+            if draft_data:
+                students = draft_data.get("students", [])
+                schools = draft_data.get("schools", [])
+                deletes = draft_data.get("delete_keywords", [])
+                replacement = draft_data.get("delete_replacement", "")
+
+                # 상태 업데이트
+                self.state.update_input_patterns(students, schools, deletes)
+                self.state.update_delete_replacement(replacement)
+
+                # UI 갱신 시그널 발행
+                self.preset_loaded.emit(students, schools, deletes, replacement)
+                logger.info("임시 드래프트 데이터 복구 성공.")
+                self.state_changed.emit()
+                return True
+        except Exception as e:
+            logger.error(f"임시 드래프트 로딩 실패: {str(e)}")
+        return False
+
