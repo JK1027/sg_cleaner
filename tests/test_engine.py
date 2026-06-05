@@ -250,9 +250,9 @@ class TestAnonymizeEngine(unittest.TestCase):
         # 학생명: ['김민수', '이서연']
         # 학교명: ['서울중학교'] ('김민수'는 학생명이므로 제거됨)
         # 삭제어: ['삭제어1'] ('김민수', '서울중학교'는 학생명/학교명이므로 제거됨)
-        self.assertEqual(state.student_names, ["김민수", "이서연"])
-        self.assertEqual(state.school_names, ["서울중학교"])
-        self.assertEqual(state.delete_keywords, ["삭제어1"])
+        self.assertEqual(state.student_names_list, ("김민수", "이서연"))
+        self.assertEqual(state.school_names_list, ("서울중학교",))
+        self.assertEqual(state.delete_keywords_list, ("삭제어1",))
         
         # 2. 결정성(Determinism) 검증 (입력 순서가 매핑 인덱스 순서에 영향을 미치는지 확인)
         detector = AnonymizeDetector(

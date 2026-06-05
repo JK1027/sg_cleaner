@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QComboBox, QFileDialog, QProgressBar, QMessageBox, QGroupBox, QSplitter,
     QLineEdit, QInputDialog
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, QTimer
 from app.controllers.app_controller import AppController
 from app.ui.widgets.preview_table import PreviewTable
 from app.utils.logger import logger
@@ -27,6 +27,11 @@ class MainWindow(QMainWindow):
         
         self.init_ui()
         self.connect_signals()
+        
+        # 드래프트 저장용 디바운싱 타이머 설정 (1.5초)
+        self.draft_timer = QTimer(self)
+        self.draft_timer.setSingleShot(True)
+        self.draft_timer.timeout.connect(self.execute_draft_save)
         
         # 임시 저장본(draft)이 있다면 복원 시도
         self.controller.load_draft_to_inputs()
@@ -562,13 +567,84 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("프리셋 로드 완료.")
 
     def trigger_draft_save(self):
-        """현재 입력창 변경 내용을 draft.json 파일로 임시 자동 저장합니다."""
-        # 처리 중인 연산 중에는 수동/임시 저장 루프 방지
+        """임시 자동 저장 타이머를 실행하고 프리셋 변경점(더티 체크)을 함께 업데이트합니다."""
         if self.controller.state.is_processing:
             return
             
+        # 1. 프리셋 변경점 실시간 더티 감지 및 콤보박스 텍스트 업데이트
+        self.check_and_update_dirty_indicator()
+        
+        # 2. 타이머 재구동 (1.5초 디바운스)
+        self.draft_timer.stop()
+        self.draft_timer.start(1500)
+
+    def execute_draft_save(self):
+        """디바운스 타이머 타임아웃 시 실제 디스크에 draft.json 쓰기를 수행합니다."""
+        if self.controller.state.is_processing:
+            return
         payload = self._get_current_inputs_payload()
         self.controller.save_draft(payload)
+
+    def check_and_update_dirty_indicator(self):
+        """현재 입력창 값과 활성화된 프리셋의 원본 정규화 데이터를 비교하여 수정 표시(*)를 동기화합니다."""
+        current_id = self.controller.state.current_preset_id
+        if not current_id:
+            return
+            
+        preset_dict = self.controller.state.preset_dict
+        info = preset_dict.get(current_id)
+        if not info:
+            return
+            
+        display_name = info.get("name", "")
+        is_dirty = self._is_preset_dirty(current_id)
+        
+        # 콤보박스에 표시할 텍스트 결정
+        expected_text = f"{display_name} *" if is_dirty else display_name
+        
+        # 콤보박스 내 해당 아이템의 텍스트가 다를 경우에만 교체 (플리커링 방지)
+        for i in range(self.combo_presets.count()):
+            if self.combo_presets.itemData(i) == current_id:
+                if self.combo_presets.itemText(i) != expected_text:
+                    self.combo_presets.blockSignals(True)
+                    self.combo_presets.setItemText(i, expected_text)
+                    # 현재 선택된 아이템의 텍스트라면 헤더 표시도 즉시 동기화
+                    if self.combo_presets.currentIndex() == i:
+                        self.combo_presets.setCurrentIndex(i)
+                    self.combo_presets.blockSignals(False)
+                break
+
+    def _is_preset_dirty(self, file_id: str) -> bool:
+        """
+        불러온 프리셋 원본 리스트와 현재 입력창들의 정규화된 텍스트를 대조하여
+        실제 변경 내용이 있는지 판단합니다. (앞뒤 공백 및 엔터 빈 줄 무시)
+        """
+        try:
+            from app.services.preset_manager import PresetManager
+            original = PresetManager.load_preset(file_id)
+        except Exception:
+            return False
+            
+        # 1. 원본 데이터 정규화
+        orig_students = sorted([s.strip() for s in original.get("students", []) if s.strip()])
+        orig_schools = sorted([s.strip() for s in original.get("schools", []) if s.strip()])
+        orig_deletes = sorted([d.strip() for d in original.get("delete_keywords", []) if d.strip()])
+        orig_rep = original.get("delete_replacement", "").strip()
+        
+        # 2. 현재 입력창 데이터 정규화
+        curr_payload = self._get_current_inputs_payload()
+        curr_students = sorted(curr_payload["students"])
+        curr_schools = sorted(curr_payload["schools"])
+        curr_deletes = sorted(curr_payload["delete_keywords"])
+        curr_rep = curr_payload["delete_replacement"].strip()
+        
+        # 대소문자 및 리스트 값 비교
+        return (
+            orig_students != curr_students
+            or orig_schools != curr_schools
+            or orig_deletes != curr_deletes
+            or orig_rep != curr_rep
+        )
 
     def _get_current_inputs_payload(self) -> dict:
         """입력 필드 내용을 구조화된 딕셔너리로 추출합니다."""
@@ -585,8 +661,18 @@ class MainWindow(QMainWindow):
         }
 
     def closeEvent(self, event):
-        """창을 닫을 때 백그라운드 스레드가 실행 중이면 안전하게 취소 요청을 보냅니다."""
+        """창을 닫을 때 백그라운드 스레드가 실행 중이면 안전하게 취소 요청을 보내며, 타이머에 계류된 드래프트를 즉시 강제 플러시합니다."""
         if self.controller.state.is_processing:
             self.controller.cancel_processing()
             logger.info("창 닫기 감지: 실행 중인 작업을 정상 취소 완료했습니다.")
+            
+        # 타이머가 실행 중이면 강제로 최종 임시 저장 수행
+        if hasattr(self, "draft_timer") and self.draft_timer.isActive():
+            self.draft_timer.stop()
+            try:
+                self.execute_draft_save()
+                logger.info("창 닫기 감지: 대기 중이던 드래프트를 안전하게 강제 저장했습니다.")
+            except Exception as e:
+                logger.error(f"창 닫기 드래프트 강제 저장 중 실패 (무시하고 종료): {str(e)}")
+                
         event.accept()

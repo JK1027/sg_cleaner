@@ -56,9 +56,9 @@ class DetectionWorker(QThread):
                     self.error_occurred.emit("사용자가 작업을 취소했습니다.")
                     return
                 # 개별 파일 처리 전 진행률 알림
-                percentage = int((index / total_files) * 100)
-                file_name = file_path.split("/")[-1].split("\\")[-1]
-                self.progress_changed.emit(percentage, f"{file_name} 탐색 중...")
+                percentage_before = int((index / total_files) * 100)
+                file_name = os.path.basename(file_path)
+                self.progress_changed.emit(percentage_before, f"{file_name} 탐색 중...")
                 
                 # 확장자 파악 및 프로세서 라우팅
                 ext = os.path.splitext(file_path)[1].lower()
@@ -72,6 +72,10 @@ class DetectionWorker(QThread):
                 extracted_texts = processor.extract_texts(file_path)
                 file_results = detector.scan_text_items(extracted_texts, file_path)
                 detected_items.extend(file_results)
+                
+                # 개별 파일 처리 완료 후 진행률 및 메시지 알림
+                percentage_after = int(((index + 1) / total_files) * 100)
+                self.progress_changed.emit(percentage_after, f"{file_name} 탐색 완료")
                 
             # 완료 알림
             self.progress_changed.emit(100, "탐색 완료")
@@ -137,12 +141,15 @@ class AnonymizeWorker(QThread):
                     logger.info(f"한글(.hwp) 치환 건너뜀: {file_path}")
                     continue
 
-                percentage = int((index / total_files) * 90) # 매핑 전까지 90% 반영
-                file_name = file_path.split("/")[-1].split("\\")[-1]
-                self.progress_changed.emit(percentage, f"{file_name} 익명화 적용 중...")
+                percentage_before = int((index / total_files) * 90) # 매핑 전까지 90% 반영
+                file_name = os.path.basename(file_path)
+                self.progress_changed.emit(percentage_before, f"{file_name} 익명화 적용 중...")
                 
                 # Safe Save 파이프라인 수행
                 excel_service.apply_replacements_safe(file_path, self.replacements, self.output_dir)
+                
+                percentage_after = int(((index + 1) / total_files) * 90)
+                self.progress_changed.emit(percentage_after, f"{file_name} 익명화 적용 완료")
 
             # 2. 매핑 정보 대장 파일 생성 (필요 시)
             if self.save_mapping:
