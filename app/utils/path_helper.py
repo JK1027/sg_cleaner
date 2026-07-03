@@ -18,5 +18,11 @@ def get_resource_path(relative_path: str) -> str:
     return str(resolved_path)
 
 def get_project_root() -> Path:
-    """프로젝트 루트 폴더 경로를 획득합니다."""
+    """
+    프로젝트 루트 폴더 경로를 획득합니다.
+    PyInstaller 빌드(frozen) 시에는 실행파일(.exe)이 있는 폴더를 반환합니다.
+    """
+    import sys
+    if getattr(sys, 'frozen', False):
+        return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent.parent

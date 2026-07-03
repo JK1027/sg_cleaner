@@ -25,6 +25,14 @@ def load_stylesheet(app: QApplication):
         logger.warning(f"QSS 스타일시트 파일을 찾을 수 없습니다: {qss_path}")
 
 def main():
+    # 전역 미처리 예외 로깅 훅 등록
+    def handle_exception(exc_type, exc_value, exc_traceback):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        logger.critical("미처리 예외 발생 (애플리케이션)", exc_info=(exc_type, exc_value, exc_traceback))
+    sys.excepthook = handle_exception
+
     logger.info("생기부 개인정보 익명화 도구 실행 시작.")
 
     # 0. 이전 실행에서 잔류한 temp 파일 정리 (Safe Save 비정상 종료 대비)

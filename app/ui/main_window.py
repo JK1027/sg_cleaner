@@ -224,15 +224,22 @@ class MainWindow(QMainWindow):
 
     # --- UI 이벤트 슬롯 ---
     def on_add_files_clicked(self):
-        files, _ = QFileDialog.getOpenFileNames(
-            self, 
-            "대상 문서 파일 선택", 
-            "", 
-            "All Supported Files (*.xlsx *.hwp *.hwpx);;Excel Files (*.xlsx);;Hangul Files (*.hwp *.hwpx)"
-        )
-        if files:
-            # 파일 병합 로직은 Controller에 위임 (SoC 경계 유지)
-            self.controller.add_files(files)
+        try:
+            logger.info("파일 추가 다이얼로그 호출 시작.")
+            files, _ = QFileDialog.getOpenFileNames(
+                self, 
+                "대상 문서 파일 선택", 
+                "", 
+                "All Supported Files (*.xlsx; *.hwp; *.hwpx);;Excel Files (*.xlsx);;Hangul Files (*.hwp *.hwpx)"
+            )
+            logger.info(f"파일 추가 다이얼로그 응답 수신 - 선택된 파일 수: {len(files) if files else 0}")
+            if files:
+                logger.debug(f"추가할 파일 리스트: {files}")
+                # 파일 병합 로직은 Controller에 위임 (SoC 경계 유지)
+                self.controller.add_files(files)
+        except Exception as file_err:
+            logger.error("파일 추가 과정 중 예외 발생", exc_info=True)
+            QMessageBox.critical(self, "파일 선택 오류", f"파일을 불러오는 과정에서 오류가 발생했습니다:\n{str(file_err)}")
 
     def on_clear_files_clicked(self):
         self.controller.set_selected_files([])
