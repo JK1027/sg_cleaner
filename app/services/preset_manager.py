@@ -417,7 +417,8 @@ class PresetManager:
         import openpyxl
         
         try:
-            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+            # read_only=True를 제거하여 max_column/max_row 이슈 및 빈 셀 스캔 불안정성을 방지합니다.
+            wb = openpyxl.load_workbook(file_path, data_only=True)
         except PermissionError as pe:
             raise PermissionError("파일이 이미 열려 있습니다. 엑셀 프로그램을 종료한 후 다시 시도해 주세요.") from pe
         except Exception as e:
@@ -426,32 +427,28 @@ class PresetManager:
         try:
             ws = wb.active
             
-            # 1. 헤더 행 스캔
+            # 1. 헤더 행 스캔 (최대 100행까지 스캔 범위를 확대)
             header_row_idx = None
             col_indices = {"grade": None, "class": None, "number": None, "name": None}
             
-            # 상단 30행 이내에서 헤더를 탐색 (보통 제목 행 아래에 있음)
-            for r in range(1, min(ws.max_row + 1, 30)):
-                row_vals = []
-                for c in range(1, ws.max_column + 1):
-                    val = ws.cell(row=r, column=c).value
-                    row_vals.append(str(val).strip() if val is not None else "")
+            for r_idx, row in enumerate(ws.iter_rows(max_row=100), start=1):
+                row_vals = [str(cell.value).strip() if cell.value is not None else "" for cell in row]
                 
                 grade_idx = class_idx = num_idx = name_idx = None
                 for idx, val in enumerate(row_vals):
                     val_norm = val.replace(" ", "")
-                    if val_norm in ["학년", "학년도"]:
+                    if val_norm in ["학년", "학년도", "grade"]:
                         grade_idx = idx + 1
-                    elif val_norm in ["반", "학급"]:
+                    elif val_norm in ["반", "학급", "학반", "class"]:
                         class_idx = idx + 1
-                    elif val_norm in ["번호"]:
+                    elif val_norm in ["번호", "번", "number", "no", "no."]:
                         num_idx = idx + 1
-                    elif val_norm in ["성명", "이름", "학생명", "학생이름"]:
+                    elif val_norm in ["성명", "이름", "학생명", "학생이름", "name"]:
                         name_idx = idx + 1
                 
                 # 4개 필수 컬럼이 한 행에 모두 존재하는 경우
                 if all(x is not None for x in [grade_idx, class_idx, num_idx, name_idx]):
-                    header_row_idx = r
+                    header_row_idx = r_idx
                     col_indices = {"grade": grade_idx, "class": class_idx, "number": num_idx, "name": name_idx}
                     break
             
