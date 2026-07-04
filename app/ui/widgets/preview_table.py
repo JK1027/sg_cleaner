@@ -31,6 +31,9 @@ class PreviewTable(QTableWidget):
         self.setColumnWidth(4, 220) # 변경 예정
         self.setColumnWidth(5, 80)  # 적용 여부
         
+        # 행 높이 설정 (콤보박스 수직 잘림 방지 및 여유 공간 확보)
+        self.verticalHeader().setDefaultSectionSize(34)
+        
         # 테이블 내 개별 수정 이벤트 연결
         self.itemChanged.connect(self.on_cell_changed)
 
