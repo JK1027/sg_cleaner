@@ -134,7 +134,7 @@ class AppController(QObject):
 
     def update_delete_replacement(self, replacement: str) -> None:
         """삭제 대체 텍스트를 업데이트합니다."""
-        self.state.delete_replacement = replacement
+        self.state.update_delete_replacement(replacement)
         logger.info(f"삭제 대체 텍스트 변경: '{replacement}'")
         self.state_changed.emit()
 

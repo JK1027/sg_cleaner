@@ -85,6 +85,10 @@ class AppState:
         self.status_message = status_message
         self.progress_percentage = progress
 
+    def update_delete_replacement(self, replacement: str) -> None:
+        """삭제 대체 텍스트를 업데이트합니다."""
+        self.delete_replacement = replacement
+
     def clear_detection_results(self) -> None:
         """탐지 결과 리스트를 초기화합니다."""
         self._detection_results.clear()
