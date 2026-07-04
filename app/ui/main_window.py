@@ -68,6 +68,48 @@ class DragDropListWidget(QListWidget):
                 "여기에 파일을 끌어다 놓으세요\n(.xlsx, .hwp, .hwpx)"
             )
 
+class DragDropGroupBox(QGroupBox):
+    """
+    외부 프리셋 엑셀 파일을 드래그 앤 드롭으로 가져올 수 있도록 확장한 QGroupBox
+    """
+    def __init__(self, title, parent=None, main_window=None):
+        super().__init__(title, parent)
+        self.main_window = main_window
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            supported_extensions = {".xlsx"}
+            has_supported = False
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if os.path.splitext(file_path.lower())[1] in supported_extensions:
+                    has_supported = True
+                    break
+            
+            if has_supported:
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        if event.mimeData().hasUrls() and self.main_window:
+            supported_extensions = {".xlsx"}
+            file_paths = []
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if os.path.isfile(file_path) and os.path.splitext(file_path.lower())[1] in supported_extensions:
+                    file_paths.append(file_path)
+            
+            if file_paths:
+                target_file = file_paths[0]
+                self.main_window.load_dropped_excel_preset(target_file)
+                event.acceptProposedAction()
+
+
 class MainWindow(QMainWindow):
     """
     생기부 개인정보 익명화 도구의 메인 UI 윈도우.
@@ -136,8 +178,8 @@ class MainWindow(QMainWindow):
         file_layout.addLayout(btn_file_layout)
         top_splitter.addWidget(file_group)
         
-        # 1-B. 패턴 및 옵션 입력 그룹
-        pattern_group = QGroupBox("2. 탐지 키워드 및 대장 저장 옵션")
+        # 1-B. 패턴 및 옵션 입력 그룹 (Drag & Drop 프리셋 가져오기 지원)
+        pattern_group = DragDropGroupBox("2. 탐지 키워드 및 대장 저장 옵션", main_window=self)
         pattern_layout = QGridLayout(pattern_group)
         pattern_layout.setContentsMargins(12, 18, 12, 12)
         pattern_layout.setSpacing(8)
@@ -184,18 +226,21 @@ class MainWindow(QMainWindow):
         self.lbl_students = QLabel("학생 이름 목록 (가명화):")
         pattern_layout.addWidget(self.lbl_students, 1, 0)
         self.txt_students = QPlainTextEdit()
+        self.txt_students.setAcceptDrops(False)
         self.txt_students.setPlaceholderText("예: 김민수, 이서연, 박철수")
         pattern_layout.addWidget(self.txt_students, 2, 0)
         
         self.lbl_schools = QLabel("학교명 목록 (가명화):")
         pattern_layout.addWidget(self.lbl_schools, 1, 1)
         self.txt_schools = QPlainTextEdit()
+        self.txt_schools.setAcceptDrops(False)
         self.txt_schools.setPlaceholderText("예: 서울중학교, 한국중학교")
         pattern_layout.addWidget(self.txt_schools, 2, 1)
  
         self.lbl_deletes = QLabel("삭제할 단어 목록 (제거):")
         pattern_layout.addWidget(self.lbl_deletes, 1, 2)
         self.txt_delete_keywords = QPlainTextEdit()
+        self.txt_delete_keywords.setAcceptDrops(False)
         self.txt_delete_keywords.setPlaceholderText("예: 삭제할단어1, 삭제할단어2")
         pattern_layout.addWidget(self.txt_delete_keywords, 2, 2)
         
@@ -697,6 +742,31 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("안내: 이 프리셋에는 저장된 데이터가 없습니다.")
         else:
             self.statusBar().showMessage("프리셋 로드 완료.")
+
+    def load_dropped_excel_preset(self, file_path: str):
+        """드롭된 엑셀 프리셋 파일을 가져와 화면 입력란에 적용합니다."""
+        # 덮어쓰기 경고 확인
+        has_content = (self.txt_students.toPlainText().strip() or 
+                       self.txt_schools.toPlainText().strip() or 
+                       self.txt_delete_keywords.toPlainText().strip())
+        if has_content:
+            reply = QMessageBox.question(
+                self,
+                "가져오기 확인",
+                "엑셀 프리셋을 가져오면 현재 입력란에 작성 중인 내용이 덮어씌워집니다. 계속하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        try:
+            self.controller.import_excel_preset(file_path)
+            self.statusBar().showMessage(f"엑셀 프리셋 가져오기 성공: {os.path.basename(file_path)}")
+        except PermissionError as pe:
+            QMessageBox.critical(self, "파일 잠김 오류", str(pe))
+        except Exception as e:
+            QMessageBox.critical(self, "가져오기 오류", f"엑셀 프리셋을 읽어오는 중 오류가 발생했습니다:\n{str(e)}")
 
     def on_import_excel_clicked(self):
         """엑셀 프리셋 파일을 가져와 화면 입력란에 적용합니다."""
