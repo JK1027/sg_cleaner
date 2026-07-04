@@ -3,6 +3,7 @@ from PySide6.QtCore import QThread, Signal
 from app.services.detector import AnonymizeDetector
 from app.services.excel_service import ExcelService, PROCESSORS
 from app.models.detection_model import DetectionItem
+from app.services.post_processor import PostProcessPipeline
 from app.utils.logger import logger
 from app.utils.notification_helper import NotificationHelper
 
@@ -106,13 +107,14 @@ class AnonymizeWorker(QThread):
     finished = Signal(bool, str)
 
     def __init__(self, selected_files: list[str], replacements: list[DetectionItem], 
-                 output_dir: str, save_mapping: bool, mapping_format: str):
+                 output_dir: str, save_mapping: bool, mapping_format: str, enabled_post_processors: dict = None):
         super().__init__()
         self.selected_files = selected_files
         self.replacements = replacements
         self.output_dir = output_dir
         self.save_mapping = save_mapping
         self.mapping_format = mapping_format
+        self.enabled_post_processors = enabled_post_processors or {}
         self._is_canceled = False
 
     def cancel(self):
@@ -146,7 +148,16 @@ class AnonymizeWorker(QThread):
                 self.progress_changed.emit(percentage_before, f"{file_name} 익명화 적용 중...")
                 
                 # Safe Save 파이프라인 수행
-                excel_service.apply_replacements_safe(file_path, self.replacements, self.output_dir)
+                final_saved_path = excel_service.apply_replacements_safe(file_path, self.replacements, self.output_dir)
+                
+                # 후처리(Post-Process) 파이프라인 수행
+                if self.enabled_post_processors and final_saved_path.lower().endswith(".xlsx"):
+                    self.progress_changed.emit(percentage_before, f"{file_name} 후처리 병합 해제 등 적용 중...")
+                    pipeline = PostProcessPipeline(self.enabled_post_processors)
+                    try:
+                        pipeline.execute(final_saved_path)
+                    except Exception as pipe_err:
+                        logger.error(f"후처리 파이프라인 실행 중 오류 발생: {pipe_err}")
                 
                 percentage_after = int(((index + 1) / total_files) * 90)
                 self.progress_changed.emit(percentage_after, f"{file_name} 익명화 적용 완료")

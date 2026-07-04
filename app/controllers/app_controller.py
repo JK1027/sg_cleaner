@@ -199,7 +199,8 @@ class AppController(QObject):
             replacements=self.state.detection_results_list,
             output_dir=output_dir,
             save_mapping=self.state.save_mapping,
-            mapping_format=self.state.mapping_format
+            mapping_format=self.state.mapping_format,
+            enabled_post_processors=self.state.enabled_post_processors
         )
 
         # 시그널 연동

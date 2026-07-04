@@ -59,6 +59,9 @@ class AppState:
     
     delete_replacement: str = ""
 
+    # 후처리 파이프라인 활성화 옵션 상태
+    enabled_post_processors: dict[str, bool] = field(default_factory=lambda: {"unmerge": False})
+
     # --- 컬렉션 및 상태 캡슐화 제어 메서드 ---
 
     def update_presets(self, preset_dict: dict) -> None:
@@ -116,3 +119,8 @@ class AppState:
                 item.approved = approved
                 return True
         return False
+
+    def update_post_processor_state(self, processor_id: str, enabled: bool) -> None:
+        """후처리 프로세서의 활성화 상태를 업데이트합니다."""
+        self.enabled_post_processors[processor_id] = enabled
+

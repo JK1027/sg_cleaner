@@ -288,6 +288,30 @@ class MainWindow(QMainWindow):
         result_layout.addWidget(self.preview_table)
         main_layout.addWidget(result_group, stretch=2)
         
+        # 2.5. 후처리(Post-Process) 파이프라인 구역
+        post_process_group = QGroupBox("4. 익명화 저장 후 자동 후처리(Post-Process) 옵션")
+        post_process_layout = QVBoxLayout(post_process_group)
+        self.post_process_checkboxes = {}
+        
+        try:
+            from app.services.post_processor import AVAILABLE_PROCESSORS
+            for processor in AVAILABLE_PROCESSORS:
+                chk = QCheckBox(processor.name)
+                # 클로저 바인딩 문제 방지를 위해 lambda 기본 인자 사용
+                chk.toggled.connect(lambda checked, pid=processor.id: self.controller.state.update_post_processor_state(pid, checked))
+                
+                desc = QLabel(f"<span style='color: gray; font-size: 11px;'>└ {processor.description}</span>")
+                desc.setContentsMargins(20, 0, 0, 10)
+                
+                post_process_layout.addWidget(chk)
+                post_process_layout.addWidget(desc)
+                
+                self.post_process_checkboxes[processor.id] = chk
+        except ImportError:
+            logger.warning("Post-Process 모듈을 로드할 수 없습니다.")
+
+        main_layout.addWidget(post_process_group)
+        
         # 3. 제어 및 진행 표시 구역 (하단)
         control_layout = QHBoxLayout()
         control_layout.setSpacing(15)
