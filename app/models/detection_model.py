@@ -14,4 +14,8 @@ class DetectionItem:
     match_value: str      # 실제 매칭되어 탐지된 패턴 (예: '김민수')
     replacement: str      # 변경 예정 텍스트 (예: '학생1')
     approved: bool = True # 익명화 적용 승인 여부 (검수 체크박스 연동)
+    is_ambiguous: bool = False # 동명이인 여부
+    confidence: float = 1.0 # 판정 신뢰도 (0.0 ~ 1.0)
+    ambiguity_reason: str = "" # 판정 근거
+    candidates: list[str] = field(default_factory=list) # 선택 가능한 가명 후보 리스트 (예: ["학생1105 (1-1반)"])
     item_id: str = field(default_factory=lambda: uuid.uuid4().hex)

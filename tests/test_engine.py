@@ -52,19 +52,9 @@ class TestAnonymizeEngine(unittest.TestCase):
 
     def tearDown(self):
         # 테스트 임시 파일 및 폴더 삭제 (Clean up)
-        if os.path.exists(self.test_excel_path):
-            os.remove(self.test_excel_path)
-            
-        test_out = self.test_dir / "test_data_anonymized.xlsx"
-        if os.path.exists(test_out):
-            os.remove(test_out)
-            
-        mapping_out = self.test_dir / "mapping.csv"
-        if os.path.exists(mapping_out):
-            os.remove(mapping_out)
-            
+        import shutil
         if os.path.exists(self.test_dir):
-            os.rmdir(self.test_dir)
+            shutil.rmtree(self.test_dir, ignore_errors=True)
 
     def test_detector_scanning(self):
         """규칙 기반 탐지 및 병합 셀/숨김 시트/수식 필터링 검증"""
