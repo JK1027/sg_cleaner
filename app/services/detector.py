@@ -162,15 +162,18 @@ class AnonymizeDetector:
             rep = c["replacement"]
             info = c["info"]
             
-            # info나 rep에서 학년/반 파싱
-            m = re.search(r"(\d+)-(\d+)반|\d+학년\s*(\d+)반", info)
+            # info에서 학년과 반 정보를 더 유연하게 추출
+            grade_match = re.search(r"(\d+)\s*학년|(\d+)-", info)
+            ban_match = re.search(r"(\d+)\s*반", info)
+            
             grade, ban = None, None
-            if m:
-                if m.group(1) and m.group(2):
-                    grade, ban = m.group(1), m.group(2)
+            if grade_match:
+                grade = grade_match.group(1) or grade_match.group(2)
+            if ban_match:
+                ban = ban_match.group(1)
             
             if not grade or not ban:
-                # info에서 파싱이 안 되었으면 rep(예: 학생1105)에서 파싱
+                # info에서 파싱 실패 시 rep(예: 학생1105)에서 파싱
                 m_num = re.search(r"\d+", rep)
                 if m_num:
                     num_str = m_num.group(0)
@@ -216,7 +219,8 @@ class AnonymizeDetector:
         total_score = sum(scores.values())
         if total_score == 0:
             best_rep = candidates[0]["replacement"]
-            confidence = round(1.0 / len(candidates), 2)
+            # 4순위 (폴백): 단서가 없을 경우 신뢰도 50% 미만으로 책정하며 보류.
+            confidence = min(0.49, round(1.0 / len(candidates), 2))
             reason_summary = "단서 없음 (기본 후보 제안)"
         else:
             best_rep = max(scores, key=scores.get)
@@ -288,14 +292,28 @@ class AnonymizeDetector:
                             is_homonym = pattern in self.homonym_names
                             
                             if is_homonym:
-                                # 주변 텍스트 수집 (앞뒤 5개 텍스트 아이템 결합)
-                                surround_items = []
-                                start_s = max(0, item_idx - 5)
-                                end_s = min(len(text_items), item_idx + 6)
-                                for idx_s in range(start_s, end_s):
-                                    if text_items[idx_s].location_context == text_item.location_context:
-                                        surround_items.append(text_items[idx_s].text)
-                                surround_text = " ".join(surround_items)
+                                # 동명이인 감지 위치 주변(앞뒤 200자)에 있는 타 학생들의 학급 분포 분석을 위한 surround_text 추출
+                                before_part = cell_text[:idx]
+                                if len(before_part) < 200:
+                                    # 앞방향으로 이전 아이템들을 역순 스캔하며 결합
+                                    for idx_s in range(item_idx - 1, -1, -1):
+                                        if text_items[idx_s].location_context == text_item.location_context:
+                                            before_part = text_items[idx_s].text + " " + before_part
+                                            if len(before_part) >= 200:
+                                                break
+                                before_part = before_part[-200:]
+                                
+                                after_part = cell_text[idx + pat_len:]
+                                if len(after_part) < 200:
+                                    # 뒷방향으로 이후 아이템들을 순차 스캔하며 결합
+                                    for idx_s in range(item_idx + 1, len(text_items)):
+                                        if text_items[idx_s].location_context == text_item.location_context:
+                                            after_part = after_part + " " + text_items[idx_s].text
+                                            if len(after_part) >= 200:
+                                                break
+                                after_part = after_part[:200]
+                                
+                                surround_text = before_part + " " + pattern + " " + after_part
                                 
                                 best_rep, confidence, reason, candidates = self._resolve_homonym(
                                     file_path, text_item.location_context, preview_text, surround_text, pattern

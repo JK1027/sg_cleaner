@@ -45,8 +45,9 @@ class PreviewTable(QTableWidget):
         for idx, item in enumerate(items):
             self.insertRow(idx)
             
-            # 행별 배경색 지정 (동명이인은 연한 노란색)
-            row_color = QColor(255, 253, 220) if item.is_ambiguous else None
+            # 행별 배경색 지정 (동명이인 중 신뢰도 낮은 경우 연한 노란색)
+            is_warning = item.is_ambiguous and item.confidence < 0.8
+            row_color = QColor(255, 253, 220) if is_warning else None
             
             # 1. 구역/시트명 (수정 불가)
             context_item = QTableWidgetItem(item.location_context)
@@ -73,7 +74,7 @@ class PreviewTable(QTableWidget):
             
             # 4. 원본 내용 (수정 불가)
             orig_text = item.original_value
-            if item.is_ambiguous:
+            if is_warning:
                 orig_text = f"⚠ {orig_text}"
             orig_item = QTableWidgetItem(orig_text)
             orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
