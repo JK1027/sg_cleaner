@@ -316,7 +316,7 @@ class MainWindow(QMainWindow):
         
         # 삭제 대체 텍스트 빈 값 경고 처리
         delete_rep = self.txt_delete_replacement.text()
-        if self.controller.state.delete_keywords and not delete_rep:
+        if self.controller.state.delete_keywords_list and not delete_rep:
             reply = QMessageBox.question(
                 self, 
                 "삭제 대체 텍스트 확인",
