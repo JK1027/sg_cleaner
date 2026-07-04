@@ -156,6 +156,7 @@ class MainWindow(QMainWindow):
         self.btn_clone_preset = QPushButton("복제")
         self.btn_delete_preset = QPushButton("삭제")
         self.btn_import_excel = QPushButton("엑셀 가져오기")
+        self.btn_convert_neis = QPushButton("학적현황 => 프리셋 양식 변환")
         self.btn_export_excel = QPushButton("엑셀 내보내기")
         self.btn_download_template = QPushButton("양식 다운로드")
         
@@ -164,6 +165,7 @@ class MainWindow(QMainWindow):
         preset_bar_layout.addWidget(self.btn_clone_preset)
         preset_bar_layout.addWidget(self.btn_delete_preset)
         preset_bar_layout.addWidget(self.btn_import_excel)
+        preset_bar_layout.addWidget(self.btn_convert_neis)
         preset_bar_layout.addWidget(self.btn_export_excel)
         preset_bar_layout.addWidget(self.btn_download_template)
         preset_bar_layout.addStretch()
@@ -279,6 +281,7 @@ class MainWindow(QMainWindow):
         self.btn_clone_preset.clicked.connect(self.on_clone_preset_clicked)
         self.btn_delete_preset.clicked.connect(self.on_delete_preset_clicked)
         self.btn_import_excel.clicked.connect(self.on_import_excel_clicked)
+        self.btn_convert_neis.clicked.connect(self.on_convert_neis_clicked)
         self.btn_export_excel.clicked.connect(self.on_export_excel_clicked)
         self.btn_download_template.clicked.connect(self.on_download_template_clicked)
         
@@ -720,6 +723,40 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "파일 잠김 오류", str(pe))
         except Exception as e:
             QMessageBox.critical(self, "가져오기 오류", f"엑셀 프리셋을 읽어오는 중 오류가 발생했습니다:\n{str(e)}")
+
+    def on_convert_neis_clicked(self):
+        """나이스 학적현황 엑셀을 가져와 프리셋 양식(성명:학생학번)으로 변환 후 로드합니다."""
+        # 덮어쓰기 경고 확인
+        has_content = (self.txt_students.toPlainText().strip() or 
+                       self.txt_schools.toPlainText().strip() or 
+                       self.txt_delete_keywords.toPlainText().strip())
+        if has_content:
+            reply = QMessageBox.question(
+                self,
+                "변환 확인",
+                "학적현황 파일을 가져와 변환하면 현재 입력란에 작성 중인 내용이 덮어씌워집니다. 계속하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "나이스 학적현황 엑셀 가져오기",
+            "",
+            "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        try:
+            self.controller.import_neis_excel_preset(file_path)
+            self.statusBar().showMessage(f"학적현황 변환 성공: {os.path.basename(file_path)}")
+        except PermissionError as pe:
+            QMessageBox.critical(self, "파일 잠김 오류", str(pe))
+        except Exception as e:
+            QMessageBox.critical(self, "변환 오류", f"학적현황 파일을 변환하는 중 오류가 발생했습니다:\n{str(e)}")
 
     def on_export_excel_clicked(self):
         """현재 화면의 입력값을 엑셀 파일로 저장합니다."""

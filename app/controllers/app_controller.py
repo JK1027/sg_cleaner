@@ -396,4 +396,20 @@ class AppController(QObject):
             logger.error(f"엑셀 프리셋 내보내기 중 예외 발생: {str(e)}")
             raise e
 
+    def import_neis_excel_preset(self, file_path: str) -> None:
+        """나이스 학적현황 엑셀을 가져와 가명화 약속(성명:학생학번)이 적용된 프리셋으로 변환하여 로드합니다."""
+        try:
+            students = PresetManager.convert_neis_excel_to_preset(file_path)
+            self.state.update_input_patterns(students, [], [])
+            self.state.update_delete_replacement("")
+            self.state.set_current_preset_id("")
+            
+            # UI 갱신 신호 발행
+            self.preset_loaded.emit(students, [], [], "")
+            logger.info(f"나이스 학적현황 프리셋 변환 완료: {len(students)}명 로드됨. ({file_path})")
+            self.state_changed.emit()
+        except Exception as e:
+            logger.error(f"나이스 학적현황 변환 중 예외 발생: {str(e)}")
+            raise e
+
 

@@ -410,3 +410,81 @@ class PresetManager:
             raise IOError(f"엑셀 파일 저장 중 오류가 발생했습니다: {str(e)}") from e
         finally:
             wb.close()
+
+    @classmethod
+    def convert_neis_excel_to_preset(cls, file_path: str) -> list[str]:
+        """나이스 학적현황 엑셀을 파싱하여 ['성명:학생학번', ...] 리스트로 변환합니다."""
+        import openpyxl
+        
+        try:
+            wb = openpyxl.load_workbook(file_path, data_only=True, read_only=True)
+        except PermissionError as pe:
+            raise PermissionError("파일이 이미 열려 있습니다. 엑셀 프로그램을 종료한 후 다시 시도해 주세요.") from pe
+        except Exception as e:
+            raise ValueError("지원하지 않거나 손상된 엑셀 파일입니다.") from e
+
+        try:
+            ws = wb.active
+            
+            # 1. 헤더 행 스캔
+            header_row_idx = None
+            col_indices = {"grade": None, "class": None, "number": None, "name": None}
+            
+            # 상단 30행 이내에서 헤더를 탐색 (보통 제목 행 아래에 있음)
+            for r in range(1, min(ws.max_row + 1, 30)):
+                row_vals = []
+                for c in range(1, ws.max_column + 1):
+                    val = ws.cell(row=r, column=c).value
+                    row_vals.append(str(val).strip() if val is not None else "")
+                
+                grade_idx = class_idx = num_idx = name_idx = None
+                for idx, val in enumerate(row_vals):
+                    val_norm = val.replace(" ", "")
+                    if val_norm in ["학년", "학년도"]:
+                        grade_idx = idx + 1
+                    elif val_norm in ["반", "학급"]:
+                        class_idx = idx + 1
+                    elif val_norm in ["번호"]:
+                        num_idx = idx + 1
+                    elif val_norm in ["성명", "이름", "학생명", "학생이름"]:
+                        name_idx = idx + 1
+                
+                # 4개 필수 컬럼이 한 행에 모두 존재하는 경우
+                if all(x is not None for x in [grade_idx, class_idx, num_idx, name_idx]):
+                    header_row_idx = r
+                    col_indices = {"grade": grade_idx, "class": class_idx, "number": num_idx, "name": name_idx}
+                    break
+            
+            if not header_row_idx:
+                raise ValueError("나이스 학적현황 양식이 아닙니다. 필수 열(학년, 반, 번호, 성명)을 찾을 수 없습니다.")
+
+            students = []
+            
+            # 2. 데이터 행 파싱
+            for row_cells in ws.iter_rows(min_row=header_row_idx + 1):
+                def get_cell_val(col_idx):
+                    if col_idx is not None and col_idx <= len(row_cells):
+                        return row_cells[col_idx - 1].value
+                    return None
+
+                name_val = get_cell_val(col_indices["name"])
+                grade_val = get_cell_val(col_indices["grade"])
+                class_val = get_cell_val(col_indices["class"])
+                num_val = get_cell_val(col_indices["number"])
+
+                if all(x is not None for x in [grade_val, class_val, num_val, name_val]):
+                    try:
+                        g_num = int(float(str(grade_val).strip()))
+                        c_num = int(float(str(class_val).strip()))
+                        n_num = int(float(str(num_val).strip()))
+                        name_str = str(name_val).strip()
+                        
+                        if name_str:
+                            student_num = f"{g_num}{c_num}{n_num:02d}"
+                            students.append(f"{name_str}:학생{student_num}")
+                    except (ValueError, TypeError):
+                        continue
+
+            return list(dict.fromkeys(students))
+        finally:
+            wb.close()

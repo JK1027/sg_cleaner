@@ -231,5 +231,48 @@ class TestPresetManager(unittest.TestCase):
         self.assertEqual(cleared_draft["delete_keywords"], [])
         self.assertEqual(cleared_draft["delete_replacement"], "")
 
+    def test_convert_neis_excel_to_preset(self):
+        """나이스 학적현황 엑셀을 파싱하여 프리셋 포맷으로 올바르게 변환하는지 검증"""
+        import openpyxl
+        
+        temp_excel = os.path.join(os.path.dirname(self.presets_dir), "temp_neis_test.xlsx")
+        self.created_excel_paths.append(temp_excel)
+        
+        # 1. 나이스 학적현황 모의 엑셀 생성
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        
+        # 상단 공백 및 제목 행 추가
+        ws.append([])
+        ws.append(["학적 현황 (학생명렬표)"])
+        # 헤더 행
+        ws.append(["학년", "반", "번호", "성명", "성별", "비고"])
+        # 데이터 행
+        ws.append([1, 1, 1, "KAN SOFIA", "여", ""])
+        ws.append([1, 11, 2, "홍길동", "남", ""])
+        ws.append([1, 2, 13, "이영희", "여", ""])
+        ws.append(["", "", "", "", "", ""])  # 빈행
+        ws.append([1, 2, "가나다", "잘못된행", "", ""]) # 번호 숫자가 아닌 행 (무시)
+        
+        wb.save(temp_excel)
+        wb.close()
+        
+        # 2. 변환 실행 및 검증
+        students = PresetManager.convert_neis_excel_to_preset(temp_excel)
+        self.assertEqual(students, ["KAN SOFIA:학생1101", "홍길동:학생11102", "이영희:학생1213"])
+
+        # 3. 필수 헤더가 없는 잘못된 엑셀 파일 검증
+        bad_excel = os.path.join(os.path.dirname(self.presets_dir), "temp_neis_bad.xlsx")
+        self.created_excel_paths.append(bad_excel)
+        
+        wb2 = openpyxl.Workbook()
+        ws2 = wb2.active
+        ws2.append(["잘못된헤더1", "잘못된헤더2"])
+        wb2.save(bad_excel)
+        wb2.close()
+        
+        with self.assertRaises(ValueError):
+            PresetManager.convert_neis_excel_to_preset(bad_excel)
+
 if __name__ == "__main__":
     unittest.main()
