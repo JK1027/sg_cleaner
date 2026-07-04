@@ -249,6 +249,28 @@ class AppController(QObject):
         self.process_finished.emit(success, msg)
         logger.info(f"비동기 익명화 완료 슬롯 수신: 성공여부={success}")
 
+    def reset_all_state(self) -> None:
+        """모든 파일 목록, 입력 패턴, 탐지 결과 및 프리셋 선택을 초기화하고 드래프트도 리셋합니다."""
+        self.state.update_selected_files([])
+        self.state.clear_detection_results()
+        self.state.update_input_patterns([], [], [])
+        self.state.update_delete_replacement("")
+        self.state.set_current_preset_id("")
+        
+        # UI에 초기화 알림 (입력창 비우기)
+        self.preset_loaded.emit([], [], [], "")
+        
+        # 임시 드래프트 리셋
+        self.save_draft({
+            "students": [],
+            "schools": [],
+            "delete_keywords": [],
+            "delete_replacement": ""
+        })
+        
+        logger.info("애플리케이션 전체 상태가 초기화되었습니다.")
+        self.state_changed.emit()
+
     # --- 프리셋 관리 비즈니스 로직 ---
 
     def refresh_presets(self) -> None:

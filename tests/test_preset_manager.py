@@ -175,5 +175,61 @@ class TestPresetManager(unittest.TestCase):
         self.assertEqual(imported["delete_keywords"], ["지울단어1"])
         self.assertEqual(imported["delete_replacement"], "기본대체")
 
+    def test_app_controller_reset_all_state(self):
+        """AppController의 reset_all_state 호출 시 모든 상태와 드래프트가 비워지는지 검증"""
+        from app.models.app_state import AppState
+        from app.controllers.app_controller import AppController
+        from app.models.detection_model import DetectionItem
+
+        state = AppState()
+        controller = AppController(state)
+
+        # 1. 임의 데이터 채우기
+        state.update_selected_files(["test1.xlsx", "test2.hwpx"])
+        state.update_input_patterns(["홍길동", "임꺽정"], ["서울중"], ["키워드1"])
+        state.update_delete_replacement("대체텍스트")
+        state.set_current_preset_id("preset_uuid_123")
+        state.extend_detection_results([
+            DetectionItem(
+                file_path="test1.xlsx",
+                location_context="학급",
+                location_detail="A1",
+                context_preview="홍길동 학생",
+                original_value="홍길동",
+                match_value="홍길동",
+                replacement="학생1",
+                approved=True
+            )
+        ])
+
+        # 드래프트 채우기
+        payload = {
+            "students": ["홍길동", "임꺽정"],
+            "schools": ["서울중"],
+            "delete_keywords": ["키워드1"],
+            "delete_replacement": "대체텍스트"
+        }
+        controller.save_draft(payload)
+        self.assertIsNotNone(PresetManager.load_draft())
+
+        # 2. 전체 초기화 수행
+        controller.reset_all_state()
+
+        # 3. 모든 값이 초기화되었는지 검사
+        self.assertEqual(len(state.selected_files_list), 0)
+        self.assertEqual(len(state.student_names_list), 0)
+        self.assertEqual(len(state.school_names_list), 0)
+        self.assertEqual(len(state.delete_keywords_list), 0)
+        self.assertEqual(state.delete_replacement, "")
+        self.assertEqual(state.current_preset_id, "")
+        self.assertEqual(len(state.detection_results_list), 0)
+
+        # 드래프트 복원 데이터도 비워졌는지 검사
+        cleared_draft = PresetManager.load_draft()
+        self.assertEqual(cleared_draft["students"], [])
+        self.assertEqual(cleared_draft["schools"], [])
+        self.assertEqual(cleared_draft["delete_keywords"], [])
+        self.assertEqual(cleared_draft["delete_replacement"], "")
+
 if __name__ == "__main__":
     unittest.main()

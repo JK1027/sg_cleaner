@@ -217,12 +217,17 @@ class MainWindow(QMainWindow):
         self.btn_cancel.setObjectName("btn_cancel")
         self.btn_cancel.setVisible(False)
         
+        # 전체 초기화 버튼 추가
+        self.btn_reset = QPushButton("전체 초기화")
+        self.btn_reset.setObjectName("btn_reset")
+        
         # 저장 버튼 (QSS 커스텀 스타일 연동을 위한 objectName 설정)
         self.btn_save = QPushButton("익명화 결과 파일 최종 저장")
         self.btn_save.setObjectName("btn_save")
         
         control_layout.addWidget(self.progress_bar, stretch=1)
         control_layout.addWidget(self.btn_cancel)
+        control_layout.addWidget(self.btn_reset)
         control_layout.addWidget(self.btn_save)
         main_layout.addLayout(control_layout)
         
@@ -266,6 +271,9 @@ class MainWindow(QMainWindow):
         
         # 취소 버튼 연결
         self.btn_cancel.clicked.connect(self.on_cancel_clicked)
+        
+        # 전체 초기화 버튼 연결
+        self.btn_reset.clicked.connect(self.on_reset_clicked)
         
         # 컨트롤러의 상태 피드백 구독
         self.controller.state_changed.connect(self.on_state_changed)
@@ -345,6 +353,20 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("취소 중... 잠시만 기다려주세요.")
         self.controller.cancel_processing()
 
+    def on_reset_clicked(self):
+        """전체 초기화 클릭 시 경고 메시지 팝업을 거쳐 상태를 리셋합니다."""
+        reply = QMessageBox.question(
+            self,
+            "전체 초기화 확인",
+            "현재 추가된 모든 문서 파일 목록, 입력창의 키워드 및 자동 탐지 결과가 전부 삭제됩니다.\n"
+            "정말로 초기화하시겠습니까?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.controller.reset_all_state()
+            self.statusBar().showMessage("전체 초기화 완료")
+
     @Slot(str, str, object)
     def on_table_item_edited(self, item_id: str, field_name: str, value: object):
         if field_name == "approved":
@@ -410,6 +432,7 @@ class MainWindow(QMainWindow):
         # 진행 상태에 따라 취소 버튼 동적 제어
         self.btn_cancel.setVisible(state.is_processing)
         self.btn_cancel.setEnabled(state.is_processing)
+        self.btn_reset.setEnabled(not state.is_processing)
         self.btn_add_files.setEnabled(not state.is_processing)
         self.btn_clear_files.setEnabled(not state.is_processing)
         self.txt_students.setEnabled(not state.is_processing)
