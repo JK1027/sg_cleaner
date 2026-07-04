@@ -9,6 +9,47 @@ from PySide6.QtCore import Qt, Slot, QTimer
 from app.controllers.app_controller import AppController
 from app.ui.widgets.preview_table import PreviewTable
 from app.utils.logger import logger
+from PySide6.QtGui import QDragEnterEvent, QDropEvent
+
+class DragDropListWidget(QListWidget):
+    """
+    외부 파일을 드래그 앤 드롭으로 추가할 수 있도록 확장한 QListWidget
+    """
+    def __init__(self, parent=None, controller=None):
+        super().__init__(parent)
+        self.controller = controller
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            supported_extensions = {".xlsx", ".hwp", ".hwpx"}
+            has_supported = False
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if os.path.splitext(file_path.lower())[1] in supported_extensions:
+                    has_supported = True
+                    break
+            
+            if has_supported:
+                event.acceptProposedAction()
+                return
+        event.ignore()
+
+    def dragMoveEvent(self, event):
+        event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        if event.mimeData().hasUrls():
+            supported_extensions = {".xlsx", ".hwp", ".hwpx"}
+            file_paths = []
+            for url in event.mimeData().urls():
+                file_path = url.toLocalFile()
+                if os.path.isfile(file_path) and os.path.splitext(file_path.lower())[1] in supported_extensions:
+                    file_paths.append(file_path)
+            
+            if file_paths and self.controller:
+                self.controller.add_files(file_paths)
+                event.acceptProposedAction()
 
 class MainWindow(QMainWindow):
     """
@@ -61,7 +102,7 @@ class MainWindow(QMainWindow):
         file_layout = QVBoxLayout(file_group)
         file_layout.setContentsMargins(12, 18, 12, 12)
         
-        self.file_list = QListWidget()
+        self.file_list = DragDropListWidget(controller=self.controller)
         
         btn_file_layout = QHBoxLayout()
         self.btn_add_files = QPushButton("파일 추가")
