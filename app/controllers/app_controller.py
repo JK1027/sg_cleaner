@@ -45,7 +45,7 @@ class AppController(QObject):
         UI가 state.selected_files를 직접 읽어 병합하는 대신
         이 메서드가 병합 로직을 담당하여 SoC 경계를 유지합니다.
         """
-        merged = list(dict.fromkeys(self.state.selected_files_list + new_file_paths))
+        merged = list(dict.fromkeys(list(self.state.selected_files_list) + new_file_paths))
         self.set_selected_files(merged)
 
     def has_files(self) -> bool:

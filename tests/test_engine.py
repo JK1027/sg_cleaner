@@ -451,7 +451,25 @@ class TestAnonymizeEngine(unittest.TestCase):
             )
             self.assertTrue(any("동명이인" in log for log in log_capture.output))
 
+    def test_controller_add_files_type(self):
+        """AppController.add_files 호출 시 튜플/리스트 타입 결합 예외 방지 검증"""
+        from app.models.app_state import AppState
+        from app.controllers.app_controller import AppController
+        
+        state = AppState()
+        controller = AppController(state)
+        
+        # 1. 최초 파일 세팅
+        controller.set_selected_files(["file1.xlsx"])
+        
+        # 2. 파일 추가 시 list + tuple 결합 오류가 없어야 함
+        controller.add_files(["file2.xlsx", "file1.xlsx"])
+        
+        # 중복 제거되어 총 2개 파일이 순서대로 유지되는지 확인
+        self.assertEqual(state.selected_files_list, ("file1.xlsx", "file2.xlsx"))
+
 if __name__ == "__main__":
     unittest.main()
+
 
 
