@@ -215,7 +215,14 @@ class PresetManager:
                 val = ws.cell(row=1, column=col).value
                 headers.append(str(val).strip() if val is not None else "")
 
-            col_indices = {"students": None, "schools": None, "deletes": None, "replacement": None}
+            col_indices = {
+                "students": None,
+                "student_replacements": None,
+                "schools": None,
+                "school_replacements": None,
+                "deletes": None,
+                "replacement": None
+            }
             
             def normalize(s: str) -> str:
                 return s.replace(" ", "").replace("_", "").lower()
@@ -224,8 +231,12 @@ class PresetManager:
                 h_norm = normalize(h)
                 if any(x in h_norm for x in ["삭제대체", "대체텍스트", "대체"]):
                     col_indices["replacement"] = idx + 1
+                elif any(x in h_norm for x in ["학생변경예정", "학생변경", "학생가명"]):
+                    col_indices["student_replacements"] = idx + 1
                 elif any(x in h_norm for x in ["학생이름", "학생명", "학생"]):
                     col_indices["students"] = idx + 1
+                elif any(x in h_norm for x in ["학교변경예정", "학교변경", "학교가명"]):
+                    col_indices["school_replacements"] = idx + 1
                 elif any(x in h_norm for x in ["학교명", "학교이름", "학교"]):
                     col_indices["schools"] = idx + 1
                 elif any(x in h_norm for x in ["삭제할단어", "삭제단어", "삭제"]):
@@ -248,24 +259,38 @@ class PresetManager:
                         return row_cells[col_idx - 1].value
                     return None
 
+                # 학생명 파싱
                 students_val = get_cell_val(col_indices["students"])
                 if students_val is not None:
-                    val_str = str(students_val).strip()
-                    if val_str:
-                        students.append(val_str)
+                    name_str = str(students_val).strip()
+                    if name_str:
+                        rep_val = get_cell_val(col_indices["student_replacements"])
+                        rep_str = str(rep_val).strip() if rep_val is not None else ""
+                        if rep_str:
+                            students.append(f"{name_str}:{rep_str}")
+                        else:
+                            students.append(name_str)
 
+                # 학교명 파싱
                 schools_val = get_cell_val(col_indices["schools"])
                 if schools_val is not None:
-                    val_str = str(schools_val).strip()
-                    if val_str:
-                        schools.append(val_str)
+                    school_str = str(schools_val).strip()
+                    if school_str:
+                        rep_val = get_cell_val(col_indices["school_replacements"])
+                        rep_str = str(rep_val).strip() if rep_val is not None else ""
+                        if rep_str:
+                            schools.append(f"{school_str}:{rep_str}")
+                        else:
+                            schools.append(school_str)
 
+                # 삭제할 단어 파싱
                 deletes_val = get_cell_val(col_indices["deletes"])
                 if deletes_val is not None:
                     val_str = str(deletes_val).strip()
                     if val_str:
                         deletes.append(val_str)
 
+                # 삭제 대체 텍스트는 첫 데이터 행(2행)에서만 로드
                 if row_idx == 2:
                     rep_val = get_cell_val(col_indices["replacement"])
                     if rep_val is not None:
@@ -293,7 +318,7 @@ class PresetManager:
         ws.title = "익명화 프리셋 양식"
 
         # 1. 헤더 생성
-        headers = ["학생 이름", "학교명", "삭제할 단어", "삭제 대체 텍스트"]
+        headers = ["학생 이름", "학생 변경 예정", "학교명", "학교 변경 예정", "삭제할 단어", "삭제 대체 텍스트"]
         ws.append(headers)
 
         # 2. 데이터 로드 및 작성
@@ -302,12 +327,39 @@ class PresetManager:
         deletes = payload.get("delete_keywords", [])
         replacement = payload.get("delete_replacement", "")
 
-        max_len = max(len(students), len(schools), len(deletes))
+        import re
+        student_pattern = re.compile(r"^(\d{3,6})\s*([가-힣]{2,5})$")
+
+        # 학생 데이터 파싱
+        parsed_students = []
+        for s in students:
+            if ":" in s:
+                parts = s.split(":", 1)
+                parsed_students.append((parts[0].strip(), parts[1].strip()))
+            else:
+                match = student_pattern.match(s)
+                if match:
+                    parsed_students.append((match.group(2), f"학생{match.group(1)}"))
+                else:
+                    parsed_students.append((s, ""))
+
+        # 학교 데이터 파싱
+        parsed_schools = []
+        for sch in schools:
+            if ":" in sch:
+                parts = sch.split(":", 1)
+                parsed_schools.append((parts[0].strip(), parts[1].strip()))
+            else:
+                parsed_schools.append((sch, ""))
+
+        max_len = max(len(parsed_students), len(parsed_schools), len(deletes))
         
         for i in range(max_len):
             row_data = [
-                students[i] if i < len(students) else "",
-                schools[i] if i < len(schools) else "",
+                parsed_students[i][0] if i < len(parsed_students) else "",
+                parsed_students[i][1] if i < len(parsed_students) else "",
+                parsed_schools[i][0] if i < len(parsed_schools) else "",
+                parsed_schools[i][1] if i < len(parsed_schools) else "",
                 deletes[i] if i < len(deletes) else "",
                 replacement if i == 0 else ""
             ]
@@ -322,31 +374,33 @@ class PresetManager:
         thin_side = Side(border_style="thin", color="CCCCCC")
         border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
 
-        for col_idx in range(1, 5):
+        # 헤더 스타일
+        for col_idx in range(1, 7):
             cell = ws.cell(row=1, column=col_idx)
             cell.font = header_font
             cell.fill = header_fill
             cell.alignment = center_align
             cell.border = border
 
+        # 데이터 스타일
         for r in range(2, max_len + 2):
-            for col_idx in range(1, 5):
+            for col_idx in range(1, 7):
                 cell = ws.cell(row=r, column=col_idx)
                 cell.border = border
                 cell.font = Font(name="맑은 고딕", size=10)
-                if col_idx == 4:
+                if col_idx in (2, 4, 6):
                     cell.alignment = center_align
                 else:
                     cell.alignment = left_align
 
         # 열 너비 설정
-        col_widths = {"A": 22, "B": 22, "C": 22, "D": 26}
+        col_widths = {"A": 22, "B": 22, "C": 22, "D": 22, "E": 22, "F": 26}
         for col_letter, width in col_widths.items():
             ws.column_dimensions[col_letter].width = width
 
         # 필터 적용
         if max_len > 0:
-            ws.auto_filter.ref = f"A1:D{max_len + 1}"
+            ws.auto_filter.ref = f"A1:F{max_len + 1}"
 
         try:
             wb.save(file_path)

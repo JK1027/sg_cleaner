@@ -120,8 +120,8 @@ class TestPresetManager(unittest.TestCase):
     def test_excel_preset_export_and_import(self):
         """엑셀 프리셋의 export 및 import 통합 기능 검증"""
         payload = {
-            "students": ["1101 홍길동", "1102 임꺽정"],
-            "schools": ["서울중학교", "한국중학교"],
+            "students": ["홍길동:대표학생", "1102 임꺽정", "김철수"],
+            "schools": ["서울중학교:S중", "한국중학교"],
             "delete_keywords": ["삭제키워드1"],
             "delete_replacement": "대체어"
         }
@@ -137,8 +137,9 @@ class TestPresetManager(unittest.TestCase):
         imported = PresetManager.import_preset_from_excel(temp_excel)
         
         # 데이터 원형 일치 여부 확인
-        self.assertEqual(imported["students"], ["1101 홍길동", "1102 임꺽정"])
-        self.assertEqual(imported["schools"], ["서울중학교", "한국중학교"])
+        # 1102 임꺽정은 내보낼 때 '임꺽정:학생1102'로 쪼개졌다가 다시 합쳐져 '임꺽정:학생1102'로 와야 함
+        self.assertEqual(imported["students"], ["홍길동:대표학생", "임꺽정:학생1102", "김철수"])
+        self.assertEqual(imported["schools"], ["서울중학교:S중", "한국중학교"])
         self.assertEqual(imported["delete_keywords"], ["삭제키워드1"])
         self.assertEqual(imported["delete_replacement"], "대체어")
 
@@ -152,15 +153,15 @@ class TestPresetManager(unittest.TestCase):
         # 1. 수동으로 열이 뒤섞이고 빈 행이 존재하는 openpyxl 워크북 생성
         wb = openpyxl.Workbook()
         ws = wb.active
-        # 헤더 순서 섞기 (학교명 -> 삭제 대체 텍스트 -> 학생 이름 -> 삭제할 단어)
-        ws.append(["학교명", "삭제 대체 텍스트", "학생 이름", "삭제할 단어"])
+        # 헤더 순서 섞기 (학교명 -> 삭제 대체 텍스트 -> 학생 이름 -> 학생 변경 예정 -> 삭제할 단어 -> 학교 변경 예정)
+        ws.append(["학교명", "삭제 대체 텍스트", "학생 이름", "학생 변경 예정", "삭제할 단어", "학교 변경 예정"])
         
         # 첫 번째 데이터 행
-        ws.append(["서울중", "기본대체", "1101 홍길동", "지울단어1"])
+        ws.append(["서울중", "기본대체", "홍길동", "대표학생", "지울단어1", "S중"])
         # 두 번째 데이터 행
-        ws.append(["경기중", "", "1102 김영희", ""])
+        ws.append(["경기중", "", "김영희", "", "", ""])
         # 세 번째 데이터 행 (학생 이름만 있고 나머지는 빈 값)
-        ws.append(["", "", "1103 이철수", ""])
+        ws.append(["", "", "이철수", "학생1103", "", ""])
         
         wb.save(temp_excel)
         wb.close()
@@ -169,8 +170,8 @@ class TestPresetManager(unittest.TestCase):
         imported = PresetManager.import_preset_from_excel(temp_excel)
         
         # 3. 데이터 검증
-        self.assertEqual(imported["students"], ["1101 홍길동", "1102 김영희", "1103 이철수"])
-        self.assertEqual(imported["schools"], ["서울중", "경기중"])
+        self.assertEqual(imported["students"], ["홍길동:대표학생", "김영희", "이철수:학생1103"])
+        self.assertEqual(imported["schools"], ["서울중:S중", "경기중"])
         self.assertEqual(imported["delete_keywords"], ["지울단어1"])
         self.assertEqual(imported["delete_replacement"], "기본대체")
 

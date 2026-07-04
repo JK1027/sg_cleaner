@@ -22,14 +22,17 @@ class AnonymizeDetector:
                  delete_keywords: list[str] = None, delete_replacement: str = ""):
         import re
         self.raw_student_names = list(dict.fromkeys([name.strip() for name in student_names if name.strip()]))
-        self.school_names = list(dict.fromkeys([school.strip() for school in school_names if school.strip()]))
+        self.raw_school_names = list(dict.fromkeys([school.strip() for school in school_names if school.strip()]))
         self.delete_keywords = list(dict.fromkeys([word.strip() for word in (delete_keywords or []) if word.strip()]))
         self.delete_replacement = delete_replacement
         
         self.student_names = []
         self.custom_student_replacements = {}
+        self.school_names = []
+        self.custom_school_replacements = {}
         
         self._build_student_mapping()
+        self._build_school_mapping()
         
         # 가명화 대체 이름 맵
         self.student_mapping = {}
@@ -38,15 +41,29 @@ class AnonymizeDetector:
 
     def _build_student_mapping(self) -> None:
         """
-        학생 명렬표 데이터를 정밀 파싱하여 학번 기반 매핑 딕셔너리를 빌드합니다.
-        - 정규식 가드: 학번 3~6자리 + 한글 이름 2~5자리 지원
-        - 동명이인 중복 경고 지원
+        학생 명렬표 데이터를 정밀 파싱하여 학번 기반 또는 사용자 정의 가명 맵을 빌드합니다.
+        - 형식 A: '이름:변경예정' (예: '홍길동:대표학생') -> 사용자 정의 매핑
+        - 형식 B: '1101 홍길동' -> 학번 기반 매핑 (학생1101)
+        - 형식 C: '홍길동' -> 일반 이름
         """
         import re
-        # 학번(숫자 3~6자리) + 한글 이름(2~5자리) 매치
         student_pattern = re.compile(r"^(\d{3,6})\s*([가-힣]{2,5})$")
         
         for raw_name in self.raw_student_names:
+            if ":" in raw_name:
+                parts = raw_name.split(":", 1)
+                name = parts[0].strip()
+                replacement = parts[1].strip()
+                if name:
+                    if name in self.custom_student_replacements:
+                        logger.warning(
+                            f"동명이인 매핑 충돌 감지: '{name}'은(는) 이미 '{self.custom_student_replacements[name]}'로 매핑되어 있습니다. "
+                            f"새로운 매핑 '{replacement}'(으)로 덮어씌워집니다."
+                        )
+                    self.student_names.append(name)
+                    self.custom_student_replacements[name] = replacement
+                continue
+
             match = student_pattern.match(raw_name)
             if match:
                 num = match.group(1)
@@ -66,6 +83,24 @@ class AnonymizeDetector:
                 
         # 최종 리스트 중복 제거
         self.student_names = list(dict.fromkeys(self.student_names))
+
+    def _build_school_mapping(self) -> None:
+        """
+        학교명 데이터를 파싱하여 사용자 정의 가명 맵을 빌드합니다.
+        - 형식 A: '학교명:변경예정' (예: '서울중학교:S중') -> 사용자 정의 매핑
+        - 형식 B: '서울중학교' -> 일반 학교명
+        """
+        for raw_school in self.raw_school_names:
+            if ":" in raw_school:
+                parts = raw_school.split(":", 1)
+                school = parts[0].strip()
+                replacement = parts[1].strip()
+                if school:
+                    self.school_names.append(school)
+                    self.custom_school_replacements[school] = replacement
+            else:
+                self.school_names.append(raw_school)
+        self.school_names = list(dict.fromkeys(self.school_names))
 
     def scan_text_items(self, text_items: list[ExtractedTextItem], file_path: str) -> list[DetectionItem]:
         """
@@ -143,8 +178,11 @@ class AnonymizeDetector:
                             
                         elif pat_type == "school":
                             if pattern not in self.school_mapping:
-                                self.school_mapping[pattern] = f"학교{_make_school_label(school_count)}"
-                                school_count += 1
+                                if pattern in self.custom_school_replacements:
+                                    self.school_mapping[pattern] = self.custom_school_replacements[pattern]
+                                else:
+                                    self.school_mapping[pattern] = f"학교{_make_school_label(school_count)}"
+                                    school_count += 1
                             item = DetectionItem(
                                 file_path=file_path,
                                 location_context=text_item.location_context,

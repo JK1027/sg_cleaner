@@ -468,6 +468,31 @@ class TestAnonymizeEngine(unittest.TestCase):
         # 중복 제거되어 총 2개 파일이 순서대로 유지되는지 확인
         self.assertEqual(state.selected_files_list, ("file1.xlsx", "file2.xlsx"))
 
+    def test_custom_replacement_with_colon(self):
+        """이름:가명 또는 학교명:가명 형식의 커스텀 치환 탐지 검증"""
+        detector = AnonymizeDetector(
+            student_names=["홍길동:대표학생", "김철수"],
+            school_names=["서울중학교:S중", "한국중학교"]
+        )
+        
+        # 파싱 구조 검증
+        self.assertEqual(detector.custom_student_replacements["홍길동"], "대표학생")
+        self.assertEqual(detector.custom_school_replacements["서울중학교"], "S중")
+        self.assertNotIn("김철수", detector.custom_student_replacements)
+        self.assertNotIn("한국중학교", detector.custom_school_replacements)
+        
+        # 스캔 후 치환 결과 검증
+        from app.services.base_processor import ExtractedTextItem
+        items = [
+            ExtractedTextItem("홍길동 학생은 서울중학교 학생입니다.", "학급기록", "A1")
+        ]
+        results = detector.scan_text_items(items, "test.xlsx")
+        self.assertEqual(len(results), 2)
+        
+        rep_map = {r.match_value: r.replacement for r in results}
+        self.assertEqual(rep_map["홍길동"], "대표학생")
+        self.assertEqual(rep_map["서울중학교"], "S중")
+
 if __name__ == "__main__":
     unittest.main()
 
