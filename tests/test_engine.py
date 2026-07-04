@@ -365,5 +365,29 @@ class TestAnonymizeEngine(unittest.TestCase):
             if os.path.exists(hwpx_path):
                 os.remove(hwpx_path)
 
+    def test_preview_table_signal_and_slot(self):
+        """PreviewTable의 item_edited 시그널과 MainWindow 슬롯의 타입 일치 여부 테스트"""
+        from PySide6.QtWidgets import QApplication
+        from app.ui.widgets.preview_table import PreviewTable
+        
+        # QApplication 인스턴스가 존재하지 않으면 생성
+        app = QApplication.instance() or QApplication([])
+        
+        table = PreviewTable()
+        
+        received_args = []
+        def dummy_slot(item_id, field_name, value):
+            received_args.append((item_id, field_name, value))
+            
+        table.item_edited.connect(dummy_slot)
+        
+        # 문자열 UUID와 필드명, 값을 시그널로 방출
+        test_uuid = "a3d1b0d2e3f4a5b6c7d8e9f012345678"
+        table.item_edited.emit(test_uuid, "replacement", "홍길동")
+        
+        self.assertEqual(len(received_args), 1)
+        self.assertEqual(received_args[0], (test_uuid, "replacement", "홍길동"))
+
 if __name__ == "__main__":
     unittest.main()
+

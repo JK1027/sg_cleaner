@@ -8,7 +8,7 @@ class PreviewTable(QTableWidget):
     개인정보 자동 탐지 결과를 표시하고 사용자가 검수(승인 토글 및 텍스트 수정)할 수 있는 테이블 위젯.
     """
     # 사용자가 행 데이터 수정 시 발생하는 시그널 (row_index, column_name, new_value)
-    item_edited = Signal(int, str, object)
+    item_edited = Signal(str, str, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)

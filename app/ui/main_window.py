@@ -295,6 +295,7 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage("취소 중... 잠시만 기다려주세요.")
         self.controller.cancel_processing()
 
+    @Slot(str, str, object)
     def on_table_item_edited(self, item_id: str, field_name: str, value: object):
         if field_name == "approved":
             self.controller.update_detection_approval(item_id, bool(value))
