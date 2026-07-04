@@ -256,7 +256,7 @@ class MainWindow(QMainWindow):
         
         # 옵션 영역
         opt_layout = QHBoxLayout()
-        opt_layout.setSpacing(10)
+        opt_layout.setSpacing(15)
         self.chk_save_mapping = QCheckBox("익명화 매핑 대장 저장")
         
         self.combo_mapping_fmt = QComboBox()
@@ -265,6 +265,27 @@ class MainWindow(QMainWindow):
         
         opt_layout.addWidget(self.chk_save_mapping)
         opt_layout.addWidget(self.combo_mapping_fmt)
+        
+        # 세로 구분선 추가
+        from PySide6.QtWidgets import QFrame
+        sep = QFrame()
+        sep.setFrameShape(QFrame.VLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        opt_layout.addWidget(sep)
+        
+        # 후처리(Post-Process) 파이프라인 옵션 가로 배치
+        self.post_process_checkboxes = {}
+        try:
+            from app.services.post_processor import AVAILABLE_PROCESSORS
+            for processor in AVAILABLE_PROCESSORS:
+                chk = QCheckBox(processor.name)
+                chk.setToolTip(processor.description)  # 마우스 오버 시 상세 정보 툴팁으로 제공
+                chk.toggled.connect(lambda checked, pid=processor.id: self.controller.state.update_post_processor_state(pid, checked))
+                opt_layout.addWidget(chk)
+                self.post_process_checkboxes[processor.id] = chk
+        except ImportError:
+            logger.warning("Post-Process 모듈을 로드할 수 없습니다.")
+            
         opt_layout.addStretch()
         pattern_layout.addLayout(opt_layout, 4, 0, 1, 3)
         
@@ -287,30 +308,6 @@ class MainWindow(QMainWindow):
         self.preview_table = PreviewTable()
         result_layout.addWidget(self.preview_table)
         main_layout.addWidget(result_group, stretch=2)
-        
-        # 2.5. 후처리(Post-Process) 파이프라인 구역
-        post_process_group = QGroupBox("4. 익명화 저장 후 자동 후처리(Post-Process) 옵션")
-        post_process_layout = QVBoxLayout(post_process_group)
-        self.post_process_checkboxes = {}
-        
-        try:
-            from app.services.post_processor import AVAILABLE_PROCESSORS
-            for processor in AVAILABLE_PROCESSORS:
-                chk = QCheckBox(processor.name)
-                # 클로저 바인딩 문제 방지를 위해 lambda 기본 인자 사용
-                chk.toggled.connect(lambda checked, pid=processor.id: self.controller.state.update_post_processor_state(pid, checked))
-                
-                desc = QLabel(f"<span style='color: gray; font-size: 11px;'>└ {processor.description}</span>")
-                desc.setContentsMargins(20, 0, 0, 10)
-                
-                post_process_layout.addWidget(chk)
-                post_process_layout.addWidget(desc)
-                
-                self.post_process_checkboxes[processor.id] = chk
-        except ImportError:
-            logger.warning("Post-Process 모듈을 로드할 수 없습니다.")
-
-        main_layout.addWidget(post_process_group)
         
         # 3. 제어 및 진행 표시 구역 (하단)
         control_layout = QHBoxLayout()
@@ -568,6 +565,13 @@ class MainWindow(QMainWindow):
         self.txt_delete_replacement.blockSignals(False)
         
         self.txt_delete_replacement.setEnabled(not state.is_processing)
+        
+        # 후처리 파이프라인 옵션 제어 및 동기화
+        for pid, chk in self.post_process_checkboxes.items():
+            chk.setEnabled(not state.is_processing)
+            chk.blockSignals(True)
+            chk.setChecked(state.enabled_post_processors.get(pid, False))
+            chk.blockSignals(False)
 
     @Slot(int, str)
     def on_progress_changed(self, percentage: int, message: str):
