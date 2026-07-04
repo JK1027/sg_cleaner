@@ -20,16 +20,52 @@ class AnonymizeDetector:
     """
     def __init__(self, student_names: list[str], school_names: list[str],
                  delete_keywords: list[str] = None, delete_replacement: str = ""):
-        # 공백 제거 및 중복 제거 처리 (순서 보존)
-        self.student_names = list(dict.fromkeys([name.strip() for name in student_names if name.strip()]))
+        import re
+        self.raw_student_names = list(dict.fromkeys([name.strip() for name in student_names if name.strip()]))
         self.school_names = list(dict.fromkeys([school.strip() for school in school_names if school.strip()]))
         self.delete_keywords = list(dict.fromkeys([word.strip() for word in (delete_keywords or []) if word.strip()]))
         self.delete_replacement = delete_replacement
+        
+        self.student_names = []
+        self.custom_student_replacements = {}
+        
+        self._build_student_mapping()
         
         # 가명화 대체 이름 맵
         self.student_mapping = {}
         self.school_mapping = {}
         self.delete_mapping = {}
+
+    def _build_student_mapping(self) -> None:
+        """
+        학생 명렬표 데이터를 정밀 파싱하여 학번 기반 매핑 딕셔너리를 빌드합니다.
+        - 정규식 가드: 학번 3~6자리 + 한글 이름 2~5자리 지원
+        - 동명이인 중복 경고 지원
+        """
+        import re
+        # 학번(숫자 3~6자리) + 한글 이름(2~5자리) 매치
+        student_pattern = re.compile(r"^(\d{3,6})\s*([가-힣]{2,5})$")
+        
+        for raw_name in self.raw_student_names:
+            match = student_pattern.match(raw_name)
+            if match:
+                num = match.group(1)
+                name = match.group(2)
+                
+                # 동명이인 매핑 충돌 방지 경고 로그 출력
+                if name in self.custom_student_replacements:
+                    logger.warning(
+                        f"동명이인 매핑 충돌 감지: '{name}'은(는) 이미 '{self.custom_student_replacements[name]}'로 매핑되어 있습니다. "
+                        f"새로운 매핑 '학생{num}'(으)로 덮어씌워집니다."
+                    )
+                
+                self.student_names.append(name)
+                self.custom_student_replacements[name] = f"학생{num}"
+            else:
+                self.student_names.append(raw_name)
+                
+        # 최종 리스트 중복 제거
+        self.student_names = list(dict.fromkeys(self.student_names))
 
     def scan_text_items(self, text_items: list[ExtractedTextItem], file_path: str) -> list[DetectionItem]:
         """
@@ -86,8 +122,13 @@ class AnonymizeDetector:
 
                         if pat_type == "student":
                             if pattern not in self.student_mapping:
-                                self.student_mapping[pattern] = f"학생{student_count}"
-                                student_count += 1
+                                # ⚠️ TODO: 향후 사용자 옵션에 따라 "학생1101" 외에 "1학년1반1번" 등 출력 포맷 커스터마이징 대응
+                                # ⚠️ TODO: 문서 상에 "1101 홍길동" 형태로 학번과 이름이 붙어 있는 에지케이스 감지 및 전체 일괄 치환 가드 추가 검토
+                                if pattern in self.custom_student_replacements:
+                                    self.student_mapping[pattern] = self.custom_student_replacements[pattern]
+                                else:
+                                    self.student_mapping[pattern] = f"학생{student_count}"
+                                    student_count += 1
                             item = DetectionItem(
                                 file_path=file_path,
                                 location_context=text_item.location_context,

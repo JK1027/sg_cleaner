@@ -388,6 +388,70 @@ class TestAnonymizeEngine(unittest.TestCase):
         self.assertEqual(len(received_args), 1)
         self.assertEqual(received_args[0], (test_uuid, "replacement", "홍길동"))
 
+    def test_student_number_anonymization(self):
+        """학번이 포함된 명렬표 패턴 가명화 치환 검증"""
+        detector = AnonymizeDetector(
+            student_names=["1101 김민수", "1102 이서연", "박철수"],
+            school_names=[]
+        )
+        
+        # 1. 파싱 결과 검증
+        self.assertIn("김민수", detector.student_names)
+        self.assertIn("이서연", detector.student_names)
+        self.assertIn("박철수", detector.student_names)
+        # 학번 원본이 아니라 이름만 스캔 패턴으로 등록됨 확인
+        self.assertNotIn("1101 김민수", detector.student_names)
+        
+        # 2. 치환 맵 검증
+        self.assertEqual(detector.custom_student_replacements["김민수"], "학생1101")
+        self.assertEqual(detector.custom_student_replacements["이서연"], "학생1102")
+        self.assertNotIn("박철수", detector.custom_student_replacements) # 학번 없는 경우 custom 맵 제외
+        
+        # 3. 실제 탐지 및 치환 검증
+        from app.services.base_processor import ExtractedTextItem
+        items = [
+            ExtractedTextItem("김민수와 이서연 그리고 박철수가 활동함.", "학급기록", "A1")
+        ]
+        results = detector.scan_text_items(items, "test.xlsx")
+        
+        # 김민수(학생1101), 이서연(학생1102), 박철수(순차:학생1) -> 총 3건 검출
+        self.assertEqual(len(results), 3)
+        
+        # 치환 값 확인
+        rep_map = {r.match_value: r.replacement for r in results}
+        self.assertEqual(rep_map["김민수"], "학생1101")
+        self.assertEqual(rep_map["이서연"], "학생1102")
+        self.assertEqual(rep_map["박철수"], "학생1")
+
+    def test_strict_regex_handling(self):
+        """정규식 가드 조건에 부합하지 않는 비학번식 데이터 처리 검증"""
+        detector = AnonymizeDetector(
+            student_names=[
+                "2025 학교행사일지", # 숫자가 4자리이지만 이름 부분이 한글 2~5글자가 아님 (6글자)
+                "12 홍길동",     # 학번이 2자리 (가드 미달)
+                "1234567 홍길동", # 학번이 7자리 (가드 초과)
+                "1101 Jack",     # 한글 이름이 아님
+            ],
+            school_names=[]
+        )
+        # 모두 학번 가명화에서 배제되어 원래 입력값 그대로 스캔 패턴으로 등록됨을 검증
+        self.assertIn("2025 학교행사일지", detector.student_names)
+        self.assertIn("12 홍길동", detector.student_names)
+        self.assertIn("1234567 홍길동", detector.student_names)
+        self.assertIn("1101 Jack", detector.student_names)
+        self.assertEqual(len(detector.custom_student_replacements), 0)
+
+    def test_duplicate_student_name_warning(self):
+        """동명이인 매핑 충돌 시 경고 로그 발생 검증"""
+        # logs/app.log 에 warning 로그가 남는지 assertLogs 로 확인
+        with self.assertLogs("sg_cleaner", level="WARNING") as log_capture:
+            AnonymizeDetector(
+                student_names=["1101 김민수", "2202 김민수"],
+                school_names=[]
+            )
+            self.assertTrue(any("동명이인" in log for log in log_capture.output))
+
 if __name__ == "__main__":
     unittest.main()
+
 
