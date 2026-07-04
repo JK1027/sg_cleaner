@@ -231,3 +231,20 @@ QStatusBar {
     border-top: 1px solid #E2E8F0;
     font-size: 12px;
 }
+
+/* 전체 초기화 버튼 - 경고/파괴적 동작 색상 (적색 계열) */
+QPushButton#btn_reset {
+    background-color: #E53935;
+    color: #FFFFFF;
+    border: none;
+    font-weight: bold;
+    min-height: 35px;
+}
+
+QPushButton#btn_reset:hover {
+    background-color: #D32F2F;
+}
+
+QPushButton#btn_reset:pressed {
+    background-color: #C62828;
+}

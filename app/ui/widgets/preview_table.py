@@ -58,11 +58,13 @@ class PreviewTable(QTableWidget):
             # 3. 문맥 미리보기 (수정 불가)
             preview_item = QTableWidgetItem(item.context_preview)
             preview_item.setFlags(preview_item.flags() & ~Qt.ItemIsEditable)
+            preview_item.setToolTip(item.context_preview)
             self.setItem(idx, 2, preview_item)
             
             # 4. 원본 내용 (수정 불가)
             orig_item = QTableWidgetItem(item.original_value)
             orig_item.setFlags(orig_item.flags() & ~Qt.ItemIsEditable)
+            orig_item.setToolTip(item.original_value)
             self.setItem(idx, 3, orig_item)
             
             # 5. 대체될 텍스트 (사용자 직접 수정 가능)

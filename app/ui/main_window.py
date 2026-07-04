@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot, QTimer
 from app.controllers.app_controller import AppController
 from app.ui.widgets.preview_table import PreviewTable
+from app.ui.widgets.loading_overlay import LoadingOverlay
 from app.utils.logger import logger
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
@@ -51,6 +52,22 @@ class DragDropListWidget(QListWidget):
                 self.controller.add_files(file_paths)
                 event.acceptProposedAction()
 
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.count() == 0:
+            from PySide6.QtGui import QPainter, QColor
+            painter = QPainter(self.viewport())
+            painter.setPen(QColor(140, 150, 160))
+            font = painter.font()
+            font.setPointSize(10)
+            painter.setFont(font)
+            rect = self.viewport().rect()
+            painter.drawText(
+                rect,
+                Qt.AlignCenter,
+                "여기에 파일을 끌어다 놓으세요\n(.xlsx, .hwp, .hwpx)"
+            )
+
 class MainWindow(QMainWindow):
     """
     생기부 개인정보 익명화 도구의 메인 UI 윈도우.
@@ -67,6 +84,10 @@ class MainWindow(QMainWindow):
         NotificationHelper.initialize_broker(self)
         
         self.init_ui()
+        
+        # 로딩 오버레이 레이어 생성
+        self.overlay = LoadingOverlay(self)
+        
         self.connect_signals()
         
         # 드래프트 저장용 디바운싱 타이머 설정 (1.5초)
@@ -82,6 +103,7 @@ class MainWindow(QMainWindow):
         
         # 최초 1회 화면 그리기
         self.on_state_changed()
+        self.update_keyword_counters()
 
     def init_ui(self):
         """기본 레이아웃 및 위젯 초기 생성 및 스타일 매핑"""
@@ -149,17 +171,20 @@ class MainWindow(QMainWindow):
         pattern_layout.addLayout(preset_bar_layout, 0, 0, 1, 3)
         
         # 입력 위젯 및 라벨 (한 줄씩 하향 배치)
-        pattern_layout.addWidget(QLabel("학생 이름 목록 (가명화):"), 1, 0)
+        self.lbl_students = QLabel("학생 이름 목록 (가명화):")
+        pattern_layout.addWidget(self.lbl_students, 1, 0)
         self.txt_students = QPlainTextEdit()
         self.txt_students.setPlaceholderText("예: 김민수, 이서연, 박철수")
         pattern_layout.addWidget(self.txt_students, 2, 0)
         
-        pattern_layout.addWidget(QLabel("학교명 목록 (가명화):"), 1, 1)
+        self.lbl_schools = QLabel("학교명 목록 (가명화):")
+        pattern_layout.addWidget(self.lbl_schools, 1, 1)
         self.txt_schools = QPlainTextEdit()
         self.txt_schools.setPlaceholderText("예: 서울중학교, 한국중학교")
         pattern_layout.addWidget(self.txt_schools, 2, 1)
  
-        pattern_layout.addWidget(QLabel("삭제할 단어 목록 (제거):"), 1, 2)
+        self.lbl_deletes = QLabel("삭제할 단어 목록 (제거):")
+        pattern_layout.addWidget(self.lbl_deletes, 1, 2)
         self.txt_delete_keywords = QPlainTextEdit()
         self.txt_delete_keywords.setPlaceholderText("예: 삭제할단어1, 삭제할단어2")
         pattern_layout.addWidget(self.txt_delete_keywords, 2, 2)
@@ -411,6 +436,14 @@ class MainWindow(QMainWindow):
         """AppState 데이터 갱신에 따라 UI 컴포넌트 리프레시 및 입력 락 제어"""
         state = self.controller.state
         
+        # 로딩 오버레이 제어 및 오입력 블로킹
+        if state.is_processing:
+            self.overlay.setGeometry(self.rect())
+            self.overlay.show()
+            self.overlay.raise_()
+        else:
+            self.overlay.hide()
+            
         # 파일 리스트 리프레시
         self.file_list.clear()
         for f in state.selected_files_list:
@@ -462,6 +495,10 @@ class MainWindow(QMainWindow):
         self.progress_bar.setVisible(percentage < 100)
         self.progress_bar.setValue(percentage)
         self.statusBar().showMessage(message)
+        
+        # 로딩 오버레이 진행 상태 메시지 동기화
+        if hasattr(self, 'overlay') and self.overlay.isVisible():
+            self.overlay.label_msg.setText(message)
 
     @Slot(bool, str)
     def on_process_finished(self, success: bool, msg: str):
@@ -641,6 +678,9 @@ class MainWindow(QMainWindow):
         self.txt_delete_keywords.blockSignals(False)
         self.txt_delete_replacement.blockSignals(False)
         
+        # 카운터 실시간 연동
+        self.update_keyword_counters()
+        
         # 빈 프리셋 여부에 따른 사용자 피드백 제공
         if not students and not schools and not deletes:
             self.statusBar().showMessage("안내: 이 프리셋에는 저장된 데이터가 없습니다.")
@@ -729,15 +769,28 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "양식 다운로드 오류", f"양식 저장 중 오류가 발생했습니다:\n{str(e)}")
 
+    def update_keyword_counters(self):
+        """각 입력 텍스트 영역의 유효 단어 개수를 카운팅하여 상단 라벨에 실시간 출력합니다."""
+        students = [s.strip() for s in self.txt_students.toPlainText().replace("\n", ",").split(",") if s.strip()]
+        schools = [s.strip() for s in self.txt_schools.toPlainText().replace("\n", ",").split(",") if s.strip()]
+        deletes = [d.strip() for d in self.txt_delete_keywords.toPlainText().replace("\n", ",").split(",") if d.strip()]
+        
+        self.lbl_students.setText(f"학생 이름 목록 (가명화) - {len(students)}명:")
+        self.lbl_schools.setText(f"학교명 목록 (가명화) - {len(schools)}개:")
+        self.lbl_deletes.setText(f"삭제할 단어 목록 (제거) - {len(deletes)}개:")
+
     def trigger_draft_save(self):
-        """임시 자동 저장 타이머를 실행하고 프리셋 변경점(더티 체크)을 함께 업데이트합니다."""
+        """임시 자동 저장 타이머를 실행하고 프리셋 변경점(더티 체크) 및 글자 카운터를 업데이트합니다."""
         if self.controller.state.is_processing:
             return
             
-        # 1. 프리셋 변경점 실시간 더티 감지 및 콤보박스 텍스트 업데이트
+        # 1. 실시간 단어 카운터 업데이트
+        self.update_keyword_counters()
+            
+        # 2. 프리셋 변경점 실시간 더티 감지 및 콤보박스 텍스트 업데이트
         self.check_and_update_dirty_indicator()
         
-        # 2. 타이머 재구동 (1.5초 디바운스)
+        # 3. 타이머 재구동 (1.5초 디바운스)
         self.draft_timer.stop()
         self.draft_timer.start(1500)
 
@@ -839,3 +892,9 @@ class MainWindow(QMainWindow):
                 logger.error(f"창 닫기 드래프트 강제 저장 중 실패 (무시하고 종료): {str(e)}")
                 
         event.accept()
+
+    def resizeEvent(self, event):
+        """창 크기가 변경될 때 로딩 오버레이 크기도 동기화합니다."""
+        super().resizeEvent(event)
+        if hasattr(self, 'overlay'):
+            self.overlay.setGeometry(self.rect())
