@@ -17,6 +17,11 @@ def load_stylesheet(app: QApplication):
         try:
             with open(qss_path, "r", encoding="utf-8") as f:
                 style_data = f.read()
+                
+                # 체크박스 이미지 경로 동적 변환 (절대 경로 대응)
+                check_img_path = get_resource_path("resources/check.png").replace("\\", "/")
+                style_data = style_data.replace("__CHECK_IMAGE_PATH__", check_img_path)
+                
                 app.setStyleSheet(style_data)
                 logger.info("QSS 스타일시트 적용 성공.")
         except Exception as e:

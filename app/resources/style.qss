@@ -195,7 +195,7 @@ QCheckBox::indicator:hover {
 QCheckBox::indicator:checked {
     background: #1E88E5;
     border-color: #1E88E5;
-    image: url("data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAyNCAyNCcgZmlsbD0nbm9uZScgc3Ryb2tlPSd3aGl0ZScgc3Ryb2tlLXdpZHRoPSczJyBzdHJva2UtbGluZWNhcD0ncm91bmQnIHN0cm9rZS1saW5lam9pbj0ncm91bmQnPjxwb2x5bGluZSBwb2ludHM9JzIwIDYgOSAxNyA0IDEyJz48L3BvbHlsaW5lPjwvc3ZnPg==");
+    image: url("__CHECK_IMAGE_PATH__");
 }
 
 /* 콤보박스 (Dropdown) */
