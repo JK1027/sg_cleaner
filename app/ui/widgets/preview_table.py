@@ -146,6 +146,29 @@ class PreviewTable(QTableWidget):
             
         self.blockSignals(False)
  
+    def sync_replacement(self, item_id: str, new_rep: str):
+        """특정 아이템의 가명 변경 사항을 테이블에 즉시 동기화 (시그널 루프 방지)"""
+        for row in range(self.rowCount()):
+            context_item = self.item(row, 0)
+            if context_item and context_item.data(Qt.UserRole) == item_id:
+                cell_widget = self.cellWidget(row, 4)
+                if isinstance(cell_widget, QComboBox):
+                    cell_widget.blockSignals(True)
+                    current_index = 0
+                    for c_idx in range(cell_widget.count()):
+                        if cell_widget.itemData(c_idx) == new_rep:
+                            current_index = c_idx
+                            break
+                    cell_widget.setCurrentIndex(current_index)
+                    cell_widget.blockSignals(False)
+                else:
+                    rep_item = self.item(row, 4)
+                    if rep_item:
+                        self.blockSignals(True)
+                        rep_item.setText(new_rep)
+                        self.blockSignals(False)
+                break
+
     def on_combo_changed(self, item_id: str, combo: QComboBox):
         """콤보박스 선택 변경 시 모델 갱신 시그널 발행"""
         selected_val = combo.currentData()

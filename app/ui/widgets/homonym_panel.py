@@ -179,6 +179,20 @@ class HomonymSummaryPanel(QWidget):
                 
             self.scroll_layout.addStretch()
 
+    def sync_replacement(self, item_id: str, new_rep: str):
+        """특정 아이템의 가명 변경 사항을 상단 카드에 즉시 동기화 (시그널 루프 방지)"""
+        if item_id in self.cards:
+            card = self.cards[item_id]
+            card.item.replacement = new_rep
+            card.combo.blockSignals(True)
+            current_index = 0
+            for c_idx in range(card.combo.count()):
+                if card.combo.itemData(c_idx) == new_rep:
+                    current_index = c_idx
+                    break
+            card.combo.setCurrentIndex(current_index)
+            card.combo.blockSignals(False)
+
     def on_card_changed(self, item_id: str, new_rep: str):
         # 드롭다운 변경 시그널 방출
         self.item_edited.emit(item_id, "replacement", new_rep)

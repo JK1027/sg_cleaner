@@ -450,6 +450,10 @@ class MainWindow(QMainWindow):
             self.btn_save.setEnabled(not self.controller.state.is_processing and has_approved)
         elif field_name == "replacement":
             self.controller.update_replacement_text(item_id, str(value))
+            
+            # 상하단 양방향 즉시 동기화 연동
+            self.homonym_panel.sync_replacement(item_id, str(value))
+            self.preview_table.sync_replacement(item_id, str(value))
 
     def on_save_clicked(self):
         # 강제 포커스 해제하여 편집 중인 셀 값 적용 유도
