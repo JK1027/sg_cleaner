@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, Slot, QTimer
 from app.controllers.app_controller import AppController
 from app.ui.widgets.preview_table import PreviewTable
 from app.ui.widgets.loading_overlay import LoadingOverlay
+from app.ui.widgets.homonym_panel import HomonymSummaryPanel
 from app.utils.logger import logger
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 
@@ -280,6 +281,9 @@ class MainWindow(QMainWindow):
         result_layout = QVBoxLayout(result_group)
         result_layout.setContentsMargins(12, 18, 12, 12)
         
+        self.homonym_panel = HomonymSummaryPanel()
+        result_layout.addWidget(self.homonym_panel)
+        
         self.preview_table = PreviewTable()
         result_layout.addWidget(self.preview_table)
         main_layout.addWidget(result_group, stretch=2)
@@ -347,8 +351,9 @@ class MainWindow(QMainWindow):
         # 컨트롤러 프리셋 로드 시그널 연결
         self.controller.preset_loaded.connect(self.on_preset_loaded_from_controller)
         
-        # 테이블 내 수동 편집 중계
+        # 테이블 및 동명이인 패널 내 수동 편집 중계
         self.preview_table.item_edited.connect(self.on_table_item_edited)
+        self.homonym_panel.item_edited.connect(self.on_table_item_edited)
         
         # 취소 버튼 연결
         self.btn_cancel.clicked.connect(self.on_cancel_clicked)
@@ -497,6 +502,9 @@ class MainWindow(QMainWindow):
         scroll_val = self.preview_table.verticalScrollBar().value()
         self.preview_table.populate_data(state.detection_results_list)
         self.preview_table.verticalScrollBar().setValue(scroll_val)
+        
+        # 동명이인 집중 검수 패널 리프레시
+        self.homonym_panel.populate_data(state.detection_results_list)
         
         # ⚠️ UI 제어 상태 비활성화 제어 (처리 중일 때 입력 락 적용하여 오동작 예방)
         self.preview_table.setEnabled(not state.is_processing)
