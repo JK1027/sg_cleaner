@@ -77,7 +77,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.controller = controller
         self.setWindowTitle("생기부 개인정보 익명화 도구")
-        self.resize(1100, 800)
+        self.resize(950, 700)
         
         # 스레드 안전 트레이 알림 시그널 브로커 등록
         from app.utils.notification_helper import NotificationHelper
@@ -142,14 +142,9 @@ class MainWindow(QMainWindow):
         pattern_layout.setContentsMargins(12, 18, 12, 12)
         pattern_layout.setSpacing(8)
         
-        # 프리셋 관리 컨트롤 레이아웃 (최상단 배치)
-        preset_bar_layout = QHBoxLayout()
+        # 프리셋 관리 컨트롤 레이아웃 (최상단 배치 - 2줄 구성으로 가로 폭 축소 대응)
+        preset_bar_layout = QVBoxLayout()
         preset_bar_layout.setSpacing(6)
-        
-        preset_bar_layout.addWidget(QLabel("학생명 세트 (프리셋):"))
-        self.combo_presets = QComboBox()
-        self.combo_presets.setMinimumWidth(180)
-        preset_bar_layout.addWidget(self.combo_presets)
         
         self.btn_new_preset = QPushButton("새 프리셋")
         self.btn_save_preset = QPushButton("저장")
@@ -160,15 +155,28 @@ class MainWindow(QMainWindow):
         self.btn_export_excel = QPushButton("엑셀 내보내기")
         self.btn_download_template = QPushButton("양식 다운로드")
         
-        preset_bar_layout.addWidget(self.btn_new_preset)
-        preset_bar_layout.addWidget(self.btn_save_preset)
-        preset_bar_layout.addWidget(self.btn_clone_preset)
-        preset_bar_layout.addWidget(self.btn_delete_preset)
-        preset_bar_layout.addWidget(self.btn_import_excel)
-        preset_bar_layout.addWidget(self.btn_convert_neis)
-        preset_bar_layout.addWidget(self.btn_export_excel)
-        preset_bar_layout.addWidget(self.btn_download_template)
-        preset_bar_layout.addStretch()
+        row1_layout = QHBoxLayout()
+        row1_layout.setSpacing(6)
+        row1_layout.addWidget(QLabel("학생명 세트 (프리셋):"))
+        self.combo_presets = QComboBox()
+        self.combo_presets.setMinimumWidth(180)
+        row1_layout.addWidget(self.combo_presets)
+        row1_layout.addWidget(self.btn_new_preset)
+        row1_layout.addWidget(self.btn_save_preset)
+        row1_layout.addWidget(self.btn_clone_preset)
+        row1_layout.addWidget(self.btn_delete_preset)
+        row1_layout.addStretch()
+        
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(6)
+        row2_layout.addWidget(self.btn_import_excel)
+        row2_layout.addWidget(self.btn_convert_neis)
+        row2_layout.addWidget(self.btn_export_excel)
+        row2_layout.addWidget(self.btn_download_template)
+        row2_layout.addStretch()
+        
+        preset_bar_layout.addLayout(row1_layout)
+        preset_bar_layout.addLayout(row2_layout)
         
         pattern_layout.addLayout(preset_bar_layout, 0, 0, 1, 3)
         
