@@ -133,11 +133,17 @@ class MainWindow(QMainWindow):
         self.btn_save_preset = QPushButton("저장")
         self.btn_clone_preset = QPushButton("복제")
         self.btn_delete_preset = QPushButton("삭제")
+        self.btn_import_excel = QPushButton("엑셀 가져오기")
+        self.btn_export_excel = QPushButton("엑셀 내보내기")
+        self.btn_download_template = QPushButton("양식 다운로드")
         
         preset_bar_layout.addWidget(self.btn_new_preset)
         preset_bar_layout.addWidget(self.btn_save_preset)
         preset_bar_layout.addWidget(self.btn_clone_preset)
         preset_bar_layout.addWidget(self.btn_delete_preset)
+        preset_bar_layout.addWidget(self.btn_import_excel)
+        preset_bar_layout.addWidget(self.btn_export_excel)
+        preset_bar_layout.addWidget(self.btn_download_template)
         preset_bar_layout.addStretch()
         
         pattern_layout.addLayout(preset_bar_layout, 0, 0, 1, 3)
@@ -242,6 +248,9 @@ class MainWindow(QMainWindow):
         self.btn_save_preset.clicked.connect(self.on_save_preset_clicked)
         self.btn_clone_preset.clicked.connect(self.on_clone_preset_clicked)
         self.btn_delete_preset.clicked.connect(self.on_delete_preset_clicked)
+        self.btn_import_excel.clicked.connect(self.on_import_excel_clicked)
+        self.btn_export_excel.clicked.connect(self.on_export_excel_clicked)
+        self.btn_download_template.clicked.connect(self.on_download_template_clicked)
         
         # 임시 자동 저장 (Draft) 연동
         self.txt_students.textChanged.connect(self.trigger_draft_save)
@@ -614,6 +623,88 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("안내: 이 프리셋에는 저장된 데이터가 없습니다.")
         else:
             self.statusBar().showMessage("프리셋 로드 완료.")
+
+    def on_import_excel_clicked(self):
+        """엑셀 프리셋 파일을 가져와 화면 입력란에 적용합니다."""
+        # 덮어쓰기 경고 확인
+        has_content = (self.txt_students.toPlainText().strip() or 
+                       self.txt_schools.toPlainText().strip() or 
+                       self.txt_delete_keywords.toPlainText().strip())
+        if has_content:
+            reply = QMessageBox.question(
+                self,
+                "가져오기 확인",
+                "엑셀 프리셋을 가져오면 현재 입력란에 작성 중인 내용이 덮어씌워집니다. 계속하시겠습니까?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply != QMessageBox.Yes:
+                return
+
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "엑셀 프리셋 가져오기",
+            "",
+            "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        try:
+            self.controller.import_excel_preset(file_path)
+            self.statusBar().showMessage(f"엑셀 프리셋 가져오기 성공: {os.path.basename(file_path)}")
+        except PermissionError as pe:
+            QMessageBox.critical(self, "파일 잠김 오류", str(pe))
+        except Exception as e:
+            QMessageBox.critical(self, "가져오기 오류", f"엑셀 프리셋을 읽어오는 중 오류가 발생했습니다:\n{str(e)}")
+
+    def on_export_excel_clicked(self):
+        """현재 화면의 입력값을 엑셀 파일로 저장합니다."""
+        payload = self._get_current_inputs_payload()
+        
+        students = payload.get("students", [])
+        schools = payload.get("schools", [])
+        deletes = payload.get("delete_keywords", [])
+
+        if not students and not schools and not deletes:
+            QMessageBox.warning(self, "내보낼 데이터 없음", "내보낼 프리셋 데이터가 비어 있습니다.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "엑셀 프리셋 내보내기",
+            "익명화_프리셋.xlsx",
+            "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        try:
+            self.controller.export_excel_preset(payload, file_path)
+            self.statusBar().showMessage(f"엑셀 프리셋 내보내기 성공: {os.path.basename(file_path)}")
+        except PermissionError as pe:
+            QMessageBox.critical(self, "파일 잠김 오류", str(pe))
+        except Exception as e:
+            QMessageBox.critical(self, "내보내기 오류", f"엑셀 프리셋 저장 중 오류가 발생했습니다:\n{str(e)}")
+
+    def on_download_template_clicked(self):
+        """빈 엑셀 프리셋 양식 템플릿 파일을 다운로드합니다."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "프리셋 양식 템플릿 다운로드",
+            "익명화_프리셋_양식.xlsx",
+            "Excel Files (*.xlsx)"
+        )
+        if not file_path:
+            return
+
+        try:
+            self.controller.export_excel_preset({}, file_path)
+            self.statusBar().showMessage(f"프리셋 양식 다운로드 완료: {os.path.basename(file_path)}")
+        except PermissionError as pe:
+            QMessageBox.critical(self, "파일 잠김 오류", str(pe))
+        except Exception as e:
+            QMessageBox.critical(self, "양식 다운로드 오류", f"양식 저장 중 오류가 발생했습니다:\n{str(e)}")
 
     def trigger_draft_save(self):
         """임시 자동 저장 타이머를 실행하고 프리셋 변경점(더티 체크)을 함께 업데이트합니다."""

@@ -344,3 +344,34 @@ class AppController(QObject):
             logger.error(f"임시 드래프트 로딩 실패: {str(e)}")
         return False
 
+    def import_excel_preset(self, file_path: str) -> None:
+        """엑셀 프리셋 양식 파일을 읽어와 상태를 변경하고 UI 로딩 시그널을 발행합니다."""
+        try:
+            payload = PresetManager.import_preset_from_excel(file_path)
+            students = payload.get("students", [])
+            schools = payload.get("schools", [])
+            deletes = payload.get("delete_keywords", [])
+            replacement = payload.get("delete_replacement", "")
+
+            # 상태 업데이트
+            self.state.update_input_patterns(students, schools, deletes)
+            self.state.update_delete_replacement(replacement)
+
+            # UI 갱신 시그널 발행
+            self.preset_loaded.emit(students, schools, deletes, replacement)
+            
+            logger.info(f"엑셀 프리셋 로드 성공: {file_path}")
+            self.state_changed.emit()
+        except Exception as e:
+            logger.error(f"엑셀 프리셋 로딩 중 예외 발생: {str(e)}")
+            raise e
+
+    def export_excel_preset(self, payload: dict, file_path: str) -> None:
+        """현재 화면 정보 페이로드를 받아 엑셀 내보내기 처리를 위임합니다."""
+        try:
+            PresetManager.export_preset_to_excel(payload, file_path)
+        except Exception as e:
+            logger.error(f"엑셀 프리셋 내보내기 중 예외 발생: {str(e)}")
+            raise e
+
+
