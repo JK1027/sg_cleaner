@@ -28,7 +28,7 @@ class PreviewTable(QTableWidget):
         self.setColumnWidth(1, 80)  # 상세 위치
         self.setColumnWidth(2, 280) # 문맥 미리보기
         self.setColumnWidth(3, 200) # 원본 텍스트
-        self.setColumnWidth(4, 180) # 변경 예정
+        self.setColumnWidth(4, 220) # 변경 예정
         self.setColumnWidth(5, 80)  # 적용 여부
         
         # 테이블 내 개별 수정 이벤트 연결
