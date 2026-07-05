@@ -118,7 +118,8 @@ class PreviewTable(QTableWidget):
                 # 콤보박스 뒤에 QTableWidgetItem을 덧대어 배경색 처리 지원
                 dummy_item = QTableWidgetItem()
                 dummy_item.setFlags(dummy_item.flags() & ~Qt.ItemIsEditable)
-                dummy_item.setBackground(row_color)
+                if row_color:
+                    dummy_item.setBackground(row_color)
                 self.setItem(idx, 4, dummy_item)
             else:
                 rep_item = QTableWidgetItem(item.replacement)
