@@ -60,6 +60,12 @@ QPushButton#btn_run_detection {
     min-height: 32px;
 }
 
+QPushButton#btn_run_detection:disabled {
+    background-color: #F1F3F5;
+    color: #ADB5BD;
+    border: 1px solid #E9ECEF;
+}
+
 QPushButton#btn_run_detection:hover {
     background-color: #00796B;
 }
@@ -75,6 +81,12 @@ QPushButton#btn_save {
     border: none;
     font-weight: bold;
     min-height: 35px;
+}
+
+QPushButton#btn_save:disabled {
+    background-color: #F1F3F5;
+    color: #ADB5BD;
+    border: 1px solid #E9ECEF;
 }
 
 QPushButton#btn_save:hover {
@@ -239,6 +251,12 @@ QPushButton#btn_reset {
     border: none;
     font-weight: bold;
     min-height: 35px;
+}
+
+QPushButton#btn_reset:disabled {
+    background-color: #F1F3F5;
+    color: #ADB5BD;
+    border: 1px solid #E9ECEF;
 }
 
 QPushButton#btn_reset:hover {
