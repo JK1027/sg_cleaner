@@ -61,12 +61,12 @@ class NotificationHelper:
                 if app:
                     for widget in app.topLevelWidgets():
                         if hasattr(widget, "statusBar"):
-                            widget.statusBar().showMessage(f"[{title}] {message}", 5000)
+                            widget.statusBar().showMessage(f"[{title}] {message}", 1000)
                 return
 
             tray = cls.get_tray_icon()
             if tray and QSystemTrayIcon.supportsMessages():
-                tray.showMessage(title, message, icon_type, 5000)
+                tray.showMessage(title, message, icon_type, 1000)
                 logger.info(f"시스템 트레이 알림 송출 성공: [{title}] {message}")
             else:
                 logger.warning(f"시스템 트레이 메시지 미지원 환경. 대체 기록: [{title}] {message}")
