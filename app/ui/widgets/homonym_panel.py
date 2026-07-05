@@ -13,24 +13,15 @@ class HomonymCard(QFrame):
         super().__init__(parent)
         self.item = item
         self.on_changed_callback = on_changed_callback
+        self.is_checked = False # 검수 완료 여부 플래그
         self.init_ui()
 
     def init_ui(self):
         self.setFrameShape(QFrame.StyledPanel)
         self.setFrameShadow(QFrame.Raised)
         
-        # 카드의 미려한 경고 디자인 및 파스텔톤 배경
-        self.setStyleSheet("""
-            HomonymCard {
-                background-color: #FFFDE6;
-                border: 1px solid #FFE082;
-                border-radius: 8px;
-            }
-            QLabel {
-                border: none;
-                background: transparent;
-            }
-        """)
+        # 초기 카드 스타일 적용
+        self.update_card_style()
         
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)
@@ -47,7 +38,24 @@ class HomonymCard(QFrame):
         self.loc_label.setToolTip(f"상세 위치: {self.item.location_detail}\n\n문맥 미리보기:\n{self.item.context_preview}")
         layout.addWidget(self.loc_label)
         
-        # 3. 대체 후보 콤보박스
+        # 3. 추천 신뢰도 및 등급 배지 라벨, 정보 아이콘 ⓘ
+        conf_layout = QHBoxLayout()
+        conf_layout.setContentsMargins(0, 0, 0, 0)
+        conf_layout.setSpacing(4)
+        
+        self.conf_label = QLabel()
+        self.conf_label.setStyleSheet("font-size: 8.5pt; font-family: 'Malgun Gothic';")
+        conf_layout.addWidget(self.conf_label)
+        
+        self.info_icon = QLabel("ⓘ")
+        self.info_icon.setStyleSheet("color: #757575; font-size: 9pt; font-weight: bold; cursor: help;")
+        conf_layout.addWidget(self.info_icon)
+        conf_layout.addStretch()
+        
+        self.update_confidence_ui()
+        layout.addLayout(conf_layout)
+        
+        # 4. 대체 후보 콤보박스
         self.combo = QComboBox()
         self.combo.setMinimumWidth(160)
         self.combo.setStyleSheet("""
@@ -77,6 +85,55 @@ class HomonymCard(QFrame):
         self.combo.currentIndexChanged.connect(self.on_combo_changed)
         layout.addWidget(self.combo)
 
+    def update_card_style(self):
+        """검수 완료 상태에 따라 카드의 배경색 및 투명도를 변경합니다."""
+        if self.is_checked:
+            self.setStyleSheet("""
+                HomonymCard {
+                    background-color: #F5F5F5;
+                    border: 1px solid #E0E0E0;
+                    border-radius: 8px;
+                }
+                QLabel {
+                    border: none;
+                    background: transparent;
+                    color: #757575;
+                }
+            """)
+        else:
+            self.setStyleSheet("""
+                HomonymCard {
+                    background-color: #FFFDE6;
+                    border: 1px solid #FFE082;
+                    border-radius: 8px;
+                }
+                QLabel {
+                    border: none;
+                    background: transparent;
+                }
+            """)
+
+    def update_confidence_ui(self):
+        """추천 신뢰도 수치 및 등급을 계산하여 UI 라벨과 툴팁을 업데이트합니다."""
+        confidence_pct = min(99, int(self.item.confidence * 100))
+        
+        if confidence_pct >= 90:
+            rating_text = "🟢 매우 높음"
+            rating_color = "#2E7D32"
+        elif confidence_pct >= 70:
+            rating_text = "🟡 높음"
+            rating_color = "#EF6C00"
+        else:
+            rating_text = "🔴 낮음"
+            rating_color = "#C62828"
+            
+        self.conf_label.setText(
+            f"추천 신뢰도: <span style='color: {rating_color}; font-weight: bold;'>{confidence_pct}%</span> "
+            f"<span style='color: {rating_color}; font-size: 8.5pt;'>({rating_text})</span>"
+        )
+        reason = self.item.ambiguity_reason if self.item.ambiguity_reason else "단서 없음"
+        self.info_icon.setToolTip(f"추천 판정 근거:\n{reason}")
+
     def update_value(self, item: DetectionItem):
         """기존 카드 위젯 인스턴스를 유지하며 데이터만 업데이트 (스크롤 점프 방지)"""
         self.item = item
@@ -88,9 +145,14 @@ class HomonymCard(QFrame):
                 break
         self.combo.setCurrentIndex(current_index)
         self.combo.blockSignals(False)
+        
+        self.update_confidence_ui()
+        self.update_card_style()
 
     def on_combo_changed(self, index):
         selected_rep = self.combo.itemData(index)
+        self.is_checked = True # 콤보박스 조작 시 검수 완료로 마크
+        self.update_card_style()
         if self.on_changed_callback:
             self.on_changed_callback(self.item.item_id, selected_rep)
 
@@ -139,8 +201,11 @@ class HomonymSummaryPanel(QWidget):
 
     def populate_data(self, items: list[DetectionItem]):
         """탐지 데이터를 공급받아 동명이인 검수 카드들을 표시/갱신합니다."""
-        # 신뢰도 80% 미만의 모호한 동명이인 리스트 추출
-        homonyms = [item for item in items if item.is_ambiguous and item.confidence < 0.8]
+        # 동명이인 리스트 추출 (신뢰도 무관하게 모두 노출)
+        homonyms = [item for item in items if item.is_ambiguous]
+        
+        # 추천 신뢰도가 낮은 순서(오름차순)로 정렬
+        homonyms = sorted(homonyms, key=lambda x: x.confidence)
         
         if not homonyms:
             self.setVisible(False)
@@ -154,9 +219,9 @@ class HomonymSummaryPanel(QWidget):
         self.setVisible(True)
         self.title_label.setText(f"⚠ 수동 확인이 필요한 동명이인이 총 {len(homonyms)}건 감지되었습니다.")
         
-        # 스마트 갱신: 기존 카드 목록과 비교하여 동일하면 인스턴스를 유지
-        current_ids = {item.item_id for item in homonyms}
-        existing_ids = set(self.cards.keys())
+        # 스마트 갱신: 기존 카드 목록과 ID 및 순서가 완전히 동일하면 인스턴스를 유지 (정렬 순서 뒤바뀜 반영)
+        current_ids = [item.item_id for item in homonyms]
+        existing_ids = list(self.cards.keys())
         
         if current_ids == existing_ids:
             for item in homonyms:
