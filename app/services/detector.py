@@ -1,4 +1,4 @@
-from app.models.detection_model import DetectionItem
+from app.models.detection_model import DetectionItem, CandidateInfo
 from app.services.base_processor import ExtractedTextItem
 from app.utils.logger import logger
 
@@ -136,17 +136,25 @@ class AnonymizeDetector:
                 self.school_names.append(raw_school)
         self.school_names = list(dict.fromkeys(self.school_names))
 
-    def _resolve_homonym(self, file_path: str, location_context: str, preview_text: str, surround_text: str, name: str) -> tuple[str, float, str, list[str]]:
+    def _resolve_homonym(self, file_path: str, location_context: str, preview_text: str, surround_text: str, name: str) -> tuple[str, float, list[str], list[str], dict[str, CandidateInfo]]:
         """
         동명이인의 대체어 후보군 중 최적 후보를 다중 필터(파일명, 시트명, 주변학생 반 분포)로 결정하고
-        (최종가명, 신뢰도점수, 판정근거, candidates리스트) 를 반환합니다.
+        (최종가명, 최고신뢰도점수, 최고판정근거목록, candidates리스트, 후보군정보딕셔너리) 를 반환합니다.
         """
         import os
         import re
         
         candidates = self.student_homonyms.get(name, [])
         if not candidates:
-            return name, 1.0, "단일 매핑", []
+            info_fallback = {}
+            info_fallback[name] = CandidateInfo(
+                replacement=name,
+                info="단일 매핑",
+                confidence=1.0,
+                reasons=["단일 매핑"],
+                score=1.0
+            )
+            return name, 1.0, ["단일 매핑"], [], info_fallback
             
         file_name = os.path.basename(file_path)
         
@@ -217,23 +225,43 @@ class AnonymizeDetector:
 
         # 총합 점수 계산
         total_score = sum(scores.values())
+        
+        # 각 후보의 개별 신뢰도 및 CandidateInfo 구성
+        candidates_info = {}
+        for c in candidates:
+            rep = c["replacement"]
+            info = c["info"]
+            cand_score = scores.get(rep, 0.0)
+            
+            if total_score == 0:
+                cand_confidence = round(1.0 / len(candidates), 2)
+                cand_reasons = ["단서 없음 (기본 후보 제안)"]
+            else:
+                cand_confidence = round(cand_score / total_score, 2)
+                cand_reasons = reasons.get(rep, [])
+                if not cand_reasons:
+                    cand_reasons = ["근접 매칭 가산 적용"]
+                    
+            candidates_info[rep] = CandidateInfo(
+                replacement=rep,
+                info=info,
+                confidence=cand_confidence,
+                reasons=cand_reasons,
+                score=cand_score
+            )
+            
         if total_score == 0:
             best_rep = candidates[0]["replacement"]
-            # 4순위 (폴백): 단서가 없을 경우 신뢰도 50% 미만으로 책정하며 보류.
             confidence = min(0.49, round(1.0 / len(candidates), 2))
-            reason_summary = "단서 없음 (기본 후보 제안)"
+            best_reasons = ["단서 없음 (기본 후보 제안)"]
         else:
             best_rep = max(scores, key=scores.get)
-            best_score = scores[best_rep]
-            confidence = round(best_score / total_score, 2)
-            
-            matched_reasons = reasons[best_rep]
-            if matched_reasons:
-                reason_summary = ", ".join(matched_reasons) + " 기반 추천"
-            else:
-                reason_summary = "근접 매칭 가산 적용"
+            confidence = round(scores[best_rep] / total_score, 2)
+            best_reasons = reasons[best_rep]
+            if not best_reasons:
+                best_reasons = ["근접 매칭 가산 적용"]
                 
-        return best_rep, confidence, reason_summary, candidate_strings
+        return best_rep, confidence, best_reasons, candidate_strings, candidates_info
 
     def scan_text_items(self, text_items: list[ExtractedTextItem], file_path: str) -> list[DetectionItem]:
         """
@@ -315,10 +343,14 @@ class AnonymizeDetector:
                                 
                                 surround_text = before_part + " " + pattern + " " + after_part
                                 
-                                best_rep, confidence, reason, candidates = self._resolve_homonym(
+                                best_rep, confidence, reasons_list, candidates, candidates_info = self._resolve_homonym(
                                     file_path, text_item.location_context, preview_text, surround_text, pattern
                                 )
                                 
+                                reason_summary = ", ".join(reasons_list) + " 기반 추천" if reasons_list else "근접 매칭 가산 적용"
+                                if reasons_list and "단서 없음" in reasons_list[0]:
+                                    reason_summary = reasons_list[0]
+                                    
                                 item = DetectionItem(
                                     file_path=file_path,
                                     location_context=text_item.location_context,
@@ -330,8 +362,10 @@ class AnonymizeDetector:
                                     approved=True,
                                     is_ambiguous=True,
                                     confidence=confidence,
-                                    ambiguity_reason=reason,
-                                    candidates=candidates
+                                    ambiguity_reason=reason_summary,
+                                    candidates=candidates,
+                                    recommended_replacement=best_rep,
+                                    candidates_info=candidates_info
                                 )
                             else:
                                 if pattern not in self.student_mapping:

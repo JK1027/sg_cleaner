@@ -52,7 +52,6 @@ class HomonymCard(QFrame):
         conf_layout.addWidget(self.info_icon)
         conf_layout.addStretch()
         
-        self.update_confidence_ui()
         layout.addLayout(conf_layout)
         
         # 4. 대체 후보 콤보박스
@@ -84,6 +83,22 @@ class HomonymCard(QFrame):
         self.combo.setCurrentIndex(current_index)
         self.combo.currentIndexChanged.connect(self.on_combo_changed)
         layout.addWidget(self.combo)
+        
+        # 5. AI 추천 비일치 경고 라벨
+        self.warning_label = QLabel()
+        self.warning_label.setStyleSheet("""
+            color: #D84315; 
+            font-size: 8pt; 
+            font-weight: bold; 
+            background-color: #FBE9E7; 
+            border-radius: 4px; 
+            padding: 2px 6px;
+        """)
+        self.warning_label.setVisible(False)
+        layout.addWidget(self.warning_label)
+        
+        # 초기화 시 신뢰도 및 경고 상태 렌더링
+        self.update_confidence_ui()
 
     def update_card_style(self):
         """검수 완료 상태에 따라 카드의 배경색 및 투명도를 변경합니다."""
@@ -113,9 +128,22 @@ class HomonymCard(QFrame):
                 }
             """)
 
-    def update_confidence_ui(self):
+    def update_confidence_ui(self, replacement=None):
         """추천 신뢰도 수치 및 등급을 계산하여 UI 라벨과 툴팁을 업데이트합니다."""
-        confidence_pct = min(99, int(self.item.confidence * 100))
+        if replacement is None:
+            replacement = self.item.replacement
+            
+        # candidates_info에서 해당 가명 후보의 정보를 가져옴
+        info = self.item.candidates_info.get(replacement)
+        
+        if info:
+            confidence_val = info.confidence
+            reasons_list = info.reasons
+        else:
+            confidence_val = self.item.confidence
+            reasons_list = [self.item.ambiguity_reason] if self.item.ambiguity_reason else ["단서 없음"]
+            
+        confidence_pct = min(99, int(confidence_val * 100))
         
         if confidence_pct >= 90:
             rating_text = "🟢 매우 높음"
@@ -131,8 +159,18 @@ class HomonymCard(QFrame):
             f"추천 신뢰도: <span style='color: {rating_color}; font-weight: bold;'>{confidence_pct}%</span> "
             f"<span style='color: {rating_color}; font-size: 8.5pt;'>({rating_text})</span>"
         )
-        reason = self.item.ambiguity_reason if self.item.ambiguity_reason else "단서 없음"
-        self.info_icon.setToolTip(f"추천 판정 근거:\n{reason}")
+        
+        # 다중 근거를 글머리 기호(•) 형식으로 나열
+        bullet_reasons = "• " + "\n• ".join(reasons_list) if reasons_list else "• 단서 없음"
+        self.info_icon.setToolTip(f"추천 판정 근거:\n{bullet_reasons}")
+        
+        # ⚠️ AI 추천 후보 불일치 경고 로직
+        recommended = self.item.recommended_replacement
+        if recommended and replacement != recommended:
+            self.warning_label.setText(f"⚠️ AI 추천과 다른 후보 선택 (추천: {recommended})")
+            self.warning_label.setVisible(True)
+        else:
+            self.warning_label.setVisible(False)
 
     def update_value(self, item: DetectionItem):
         """기존 카드 위젯 인스턴스를 유지하며 데이터만 업데이트 (스크롤 점프 방지)"""
@@ -146,12 +184,13 @@ class HomonymCard(QFrame):
         self.combo.setCurrentIndex(current_index)
         self.combo.blockSignals(False)
         
-        self.update_confidence_ui()
+        self.update_confidence_ui(self.item.replacement)
         self.update_card_style()
 
     def on_combo_changed(self, index):
         selected_rep = self.combo.itemData(index)
         self.is_checked = True # 콤보박스 조작 시 검수 완료로 마크
+        self.update_confidence_ui(selected_rep) # 바뀐 후보 기준으로 실시간 업데이트
         self.update_card_style()
         if self.on_changed_callback:
             self.on_changed_callback(self.item.item_id, selected_rep)

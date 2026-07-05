@@ -2,6 +2,17 @@ import uuid
 from dataclasses import dataclass, field
 
 @dataclass
+class CandidateInfo:
+    """
+    동명이인 치환 대상 후보자 개별 분석 정보 모델
+    """
+    replacement: str             # 가명 대체어 (예: '학생2217')
+    info: str                    # 학반 정보 (예: '2-2반 17번')
+    confidence: float = 1.0      # 추천 신뢰도 (0.0 ~ 1.0)
+    reasons: list[str] = field(default_factory=list) # 판정 근거 목록
+    score: float = 0.0           # 매칭 가중치 점수
+
+@dataclass
 class DetectionItem:
     """
     탐지된 개인정보(이름, 학교명 등)의 개별 정보 모델
@@ -18,4 +29,6 @@ class DetectionItem:
     confidence: float = 1.0 # 판정 신뢰도 (0.0 ~ 1.0)
     ambiguity_reason: str = "" # 판정 근거
     candidates: list[str] = field(default_factory=list) # 선택 가능한 가명 후보 리스트 (예: ["학생1105 (1-1반)"])
+    recommended_replacement: str = ""                   # 최초 AI 추천 가명 대체어
+    candidates_info: dict[str, CandidateInfo] = field(default_factory=dict) # 후보별 상세 분석 정보 매핑 (key: replacement)
     item_id: str = field(default_factory=lambda: uuid.uuid4().hex)
