@@ -179,17 +179,8 @@ class AnonymizeWorker(QThread):
                 excel_service.save_mapping_file(unique_mappings, mapping_path, self.mapping_format)
                 
             self.progress_changed.emit(100, "작업 저장 완료")
-            NotificationHelper.show_notification(
-                "익명화 완료",
-                "익명화 및 파일 저장이 안전하게 완료되었습니다."
-            )
             self.finished.emit(True, "익명화 및 파일 저장이 안전하게 완료되었습니다.")
             
         except Exception as e:
             logger.error(f"백그라운드 익명화 실행 오류: {str(e)}", exc_info=True)
-            NotificationHelper.show_notification(
-                "익명화 실패",
-                f"익명화 처리 중 실패: {str(e)}",
-                is_error=True
-            )
             self.finished.emit(False, f"익명화 실패: {str(e)}")
