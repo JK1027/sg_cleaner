@@ -586,9 +586,18 @@ class MainWindow(QMainWindow):
 
     @Slot(bool, str)
     def on_process_finished(self, success: bool, msg: str):
-        """최종 처리 완료 메시지 팝업 출력"""
+        """최종 처리 완료 메시지 팝업 출력 (성공 시 1초 후 자동 닫힘)"""
         if success:
-            QMessageBox.information(self, "완료", msg)
+            self.success_msg_box = QMessageBox(self)
+            self.success_msg_box.setWindowTitle("완료")
+            self.success_msg_box.setText(msg)
+            self.success_msg_box.setIcon(QMessageBox.Icon.Information)
+            self.success_msg_box.addButton(QMessageBox.StandardButton.Ok)
+            
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(1000, self.success_msg_box.close)
+            
+            self.success_msg_box.open()
         else:
             QMessageBox.critical(self, "오류", msg)
             
