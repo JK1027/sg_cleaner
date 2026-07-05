@@ -27,7 +27,9 @@ class ExcelService:
         """
         앱 시작 시 이전 실행에서 잔류한 temp 파일들을 일괄 정리합니다.
         """
-        temp_dir = get_project_root() / "temp"
+        import tempfile
+        from pathlib import Path
+        temp_dir = Path(tempfile.gettempdir()) / "sg_cleaner_temp"
         if not temp_dir.exists():
             return
 
@@ -67,8 +69,9 @@ class ExcelService:
         processor = processor_cls()
 
         # 1. 임시 파일명 생성 및 복사
-        project_root = get_project_root()
-        temp_dir = project_root / "temp"
+        import tempfile
+        from pathlib import Path
+        temp_dir = Path(tempfile.gettempdir()) / "sg_cleaner_temp"
         os.makedirs(temp_dir, exist_ok=True)
         
         file_name = os.path.basename(file_path)
